@@ -213,19 +213,39 @@ for (const color of order) {
   for (let i = 0; i < 4; i++) boxQueue.push(color);
 }
 
-function spawnStack() {
-  let index = 0;
-  for (const color of boxQueue) {
-    const box = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), new THREE.MeshStandardMaterial({ color }));
-    // stack at red mark (east end of top conveyor)
-    const y = 0.6 + (index * 0.38);
-    box.position.set(2.5, y, -3);
-    box.userData = { state: 'on1', t: 0 };
-    scene.add(box);
-    boxes.push(box);
-    index++;
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
   }
-  log('Spawned stack of 16');
+  return arr;
+}
+
+function spawnStack() {
+  const colors = shuffle([...boxQueue]);
+  const cols = 4; // x
+  const rows = 2; // z
+  const layers = 2; // y (max 3)
+  const startX = 2.5;
+  const startZ = -3;
+  let i = 0;
+  for (let y = 0; y < layers; y++) {
+    for (let z = 0; z < rows; z++) {
+      for (let x = 0; x < cols; x++) {
+        if (i >= colors.length) break;
+        const color = colors[i++];
+        const box = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), new THREE.MeshStandardMaterial({ color }));
+        const px = startX + (x * 0.4);
+        const py = 0.6 + (y * 0.38);
+        const pz = startZ + (z * 0.4);
+        box.position.set(px, py, pz);
+        box.userData = { state: 'on1', t: 0 };
+        scene.add(box);
+        boxes.push(box);
+      }
+    }
+  }
+  log('Spawned mixed 16-box stack');
 }
 
 let spawnTimer = 0;
