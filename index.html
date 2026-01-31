@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Smart Factory Web Demo</title>
+  <style>
+    html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#111; color:#ddd; font-family:system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    #ui { position:fixed; top:10px; left:10px; z-index:10; background:rgba(0,0,0,0.6); padding:10px 12px; border-radius:8px; font-size:13px; }
+    #ui button { margin-right:6px; }
+    #legend span { display:inline-block; width:10px; height:10px; margin-right:6px; vertical-align:middle; }
+    #legend div { margin-top:4px; }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <div><strong>Smart Factory Demo</strong></div>
+    <div style="margin-top:6px;">
+      <button id="toggle">Pause</button>
+      <button id="reset">Reset</button>
+    </div>
+    <div id="legend" style="margin-top:8px;">
+      <div><span style="background:#bfbfbf"></span>Silver</div>
+      <div><span style="background:#999"></span>Grey</div>
+      <div><span style="background:#d4b000"></span>Yellow</div>
+      <div><span style="background:#7a4cff"></span>Purple</div>
+    </div>
+  </div>
+  <script type="module" src="main.js"></script>
+</body>
+</html>
