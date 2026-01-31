@@ -4,6 +4,17 @@ import { OrbitControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/cont
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x151515);
 
+// Simple in-app logger
+const logBuffer = [];
+function log(msg) {
+  const line = `[${new Date().toISOString()}] ${msg}`;
+  logBuffer.push(line);
+  if (logBuffer.length > 2000) logBuffer.shift();
+  console.log(line);
+}
+window.__getLog = () => logBuffer.join('\n');
+log('App start');
+
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
 camera.position.set(0, 8, 14);
 camera.lookAt(0, 0, 0);
@@ -130,6 +141,7 @@ function spawnBox() {
   box.userData = { state: 'on1', t: 0 };
   scene.add(box);
   boxes.push(box);
+  log('Spawn box');
 }
 
 let spawnTimer = 0;
@@ -168,11 +180,13 @@ function updateBoxes(delta) {
       if (gantryT > 0.9) {
         box.userData.state = 'on2';
         box.position.set(-2.5, 0.6, -3);
+        log('Drop to conveyor 2');
       }
     } else if (state === 'on2') {
       box.position.x += delta * 1.0;
       if (box.position.x >= 5.5) {
         box.userData.state = 'sorted';
+        log('Reached robot/pallet');
       }
     } else if (state === 'sorted') {
       // place on pallet
@@ -203,16 +217,31 @@ animate();
 // UI
 const toggleBtn = document.getElementById('toggle');
 const resetBtn = document.getElementById('reset');
+const downloadLogBtn = document.getElementById('downloadLog');
 
 toggleBtn.addEventListener('click', () => {
   paused = !paused;
   toggleBtn.textContent = paused ? 'Play' : 'Pause';
+  log(paused ? 'Paused' : 'Resumed');
 });
 
 resetBtn.addEventListener('click', () => {
   for (const b of boxes) scene.remove(b);
   boxes.length = 0;
   spawnTimer = 0;
+  log('Reset');
+});
+
+downloadLogBtn.addEventListener('click', () => {
+  const blob = new Blob([window.__getLog()], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'factory-demo.log.txt';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 });
 
 // Resize
