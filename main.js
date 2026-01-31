@@ -94,10 +94,10 @@ const gantryGrip = new THREE.Mesh(
   new THREE.MeshStandardMaterial({ color: 0xaaaaaa })
 );
 
-// Position gantry above conveyors
+// Position gantry above conveyors (adjustable)
 const gantryY = 2.2;
-const gantryX = 0;
-const gantryZ = 0;
+let gantryX = -2.5; // left end default
+let gantryZ = 0;
 
 gantryBeam.position.set(gantryX, gantryY, gantryZ);
 
@@ -110,6 +110,17 @@ gantryCart.add(gantryGrip);
 
 scene.add(gantryBeam);
 scene.add(gantryCart);
+
+// Keyboard control for gantry base
+window.addEventListener('keydown', (e) => {
+  const step = e.shiftKey ? 0.5 : 0.2;
+  if (e.key === 'ArrowLeft') gantryX -= step;
+  if (e.key === 'ArrowRight') gantryX += step;
+  if (e.key === 'ArrowUp') gantryZ -= step;
+  if (e.key === 'ArrowDown') gantryZ += step;
+  gantryBeam.position.set(gantryX, gantryY, gantryZ);
+  log(`Gantry base moved to X:${gantryX.toFixed(2)} Z:${gantryZ.toFixed(2)}`);
+});
 
 // Robot Arm (simple stylized)
 const robot = new THREE.Group();
@@ -162,9 +173,9 @@ function updateGantry(delta) {
   if (gantryT > 1) { gantryT = 1; gantryDir = -1; }
   if (gantryT < 0) { gantryT = 0; gantryDir = 1; }
 
-  // Lerp between conveyor1 pickup and conveyor2 drop
-  const pickup = new THREE.Vector3(-2.0, gantryY, 3);
-  const drop = new THREE.Vector3(2.0, gantryY, -3);
+  // Move straight along Z between conveyors at fixed X (vertical movement)
+  const pickup = new THREE.Vector3(gantryX, gantryY, 3);
+  const drop = new THREE.Vector3(gantryX, gantryY, -3);
   const pos = pickup.clone().lerp(drop, gantryT);
   gantryCart.position.copy(pos);
 
