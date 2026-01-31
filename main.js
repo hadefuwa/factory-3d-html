@@ -74,8 +74,8 @@ function makeConveyor(x, z) {
   return { base, belt };
 }
 
-const conveyor1 = makeConveyor(0, 3); // top
-const conveyor2 = makeConveyor(0, -3); // bottom
+const conveyor1 = makeConveyor(0, -3); // north/top
+const conveyor2 = makeConveyor(0, 3); // south/bottom
 
 // Labels
 const labelCanvas = (text) => {
@@ -96,10 +96,10 @@ const labelCanvas = (text) => {
   return sprite;
 };
 const label1 = labelCanvas('Conveyor 1 (North)');
-label1.position.set(0, 1.6, 3.8);
+label1.position.set(0, 1.6, -3.8);
 scene.add(label1);
 const label2 = labelCanvas('Conveyor 2 (South)');
-label2.position.set(0, 1.6, -3.8);
+label2.position.set(0, 1.6, 3.8);
 scene.add(label2);
 
 // Gantry
@@ -185,7 +185,7 @@ function spawnBox() {
   const color = boxQueue.shift();
   const box = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), new THREE.MeshStandardMaterial({ color }));
   // spawn at red mark (east end of top conveyor)
-  box.position.set(2.5, 0.6, 3);
+  box.position.set(2.5, 0.6, -3);
   box.userData = { state: 'on1', t: 0 };
   scene.add(box);
   boxes.push(box);
@@ -205,8 +205,8 @@ function updateGantry(delta) {
   if (gantryT < 0) { gantryT = 0; gantryDir = 1; }
 
   // Move straight along Z between conveyors at fixed X (vertical movement)
-  const pickup = new THREE.Vector3(gantryX, gantryY, 3);
-  const drop = new THREE.Vector3(gantryX, gantryY, -3);
+  const pickup = new THREE.Vector3(gantryX, gantryY, -3);
+  const drop = new THREE.Vector3(gantryX, gantryY, 3);
   const pos = pickup.clone().lerp(drop, gantryT);
   gantryCart.position.copy(pos);
 
@@ -243,7 +243,7 @@ function updateBoxes(delta) {
       box.position.copy(gantryCart.position).add(new THREE.Vector3(0, -0.6, 0));
       if (gantryT > 0.9) {
         box.userData.state = 'on2';
-        box.position.set(-2.5, 0.6, -3);
+        box.position.set(-2.5, 0.6, 3);
         log('Drop to conveyor 2');
       }
     } else if (state === 'on2') {
@@ -254,7 +254,7 @@ function updateBoxes(delta) {
       }
     } else if (state === 'sorted') {
       // place on pallet at blue mark (end of conveyor 2)
-      box.position.set(6.6, 0.35, -3);
+      box.position.set(6.6, 0.35, 3);
       box.userData.state = 'done';
     }
   }
