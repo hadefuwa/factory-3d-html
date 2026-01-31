@@ -77,6 +77,38 @@ function makeConveyor(x, z) {
 const conveyor1 = makeConveyor(0, -3); // north/top
 const conveyor2 = makeConveyor(0, 3); // south/bottom
 
+// Defect bin + piston near end of conveyor 1 (west end)
+const defectBin = new THREE.Mesh(
+  new THREE.BoxGeometry(0.6, 0.4, 0.6),
+  new THREE.MeshStandardMaterial({ color: 0x444444 })
+);
+defectBin.position.set(-2.9, 0.25, -2.2);
+scene.add(defectBin);
+
+const piston = new THREE.Mesh(
+  new THREE.BoxGeometry(0.2, 0.2, 0.6),
+  new THREE.MeshStandardMaterial({ color: 0x888888 })
+);
+piston.position.set(-2.9, 0.35, -3.4);
+scene.add(piston);
+
+// Label for defect bin
+const binLabel = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.9, 0.25),
+  new THREE.MeshStandardMaterial({ color: 0x111111, transparent: true, opacity: 0.8 })
+);
+binLabel.position.set(-2.9, 0.9, -2.2);
+binLabel.rotation.y = Math.PI / 4;
+scene.add(binLabel);
+
+// simple piston animation when box reaches defect zone (visual only)
+let pistonT = 0;
+function updatePiston(delta) {
+  pistonT += delta;
+  const push = Math.sin(pistonT * 2) > 0.8 ? 0.2 : 0;
+  piston.position.z = -3.4 + push;
+}
+
 // Labels removed
 
 // Gantry
@@ -284,6 +316,7 @@ function animate() {
     }
     updateGantry(delta);
     updateBoxes(delta);
+    updatePiston(delta);
   }
   controls.update();
   renderer.render(scene, camera);
