@@ -194,8 +194,24 @@ function updateBoxes(delta) {
   for (const box of boxes) {
     const state = box.userData.state;
     if (state === 'on1') {
-      box.position.x += delta * 1.0;
-      if (box.position.x >= -0.5) {
+      // move east -> west on top conveyor (right to left)
+      const targetX = -2.5; // end of conveyor 1
+      // simple spacing: don't move if too close to next box ahead
+      let canMove = true;
+      for (const other of boxes) {
+        if (other === box) continue;
+        if (other.userData.state === 'on1' && other.position.z === box.position.z) {
+          if (other.position.x < box.position.x && (box.position.x - other.position.x) < 0.6) {
+            canMove = false;
+            break;
+          }
+        }
+      }
+      if (canMove && box.position.x > targetX) {
+        box.position.x -= delta * 1.0;
+      }
+      if (box.position.x <= targetX + 0.01) {
+        box.position.x = targetX;
         box.userData.state = 'lift';
       }
     } else if (state === 'lift') {
