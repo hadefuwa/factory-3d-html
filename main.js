@@ -339,6 +339,14 @@ resetBtn.addEventListener('click', () => {
   for (const b of boxes) scene.remove(b);
   boxes.length = 0;
   spawnTimer = 0;
+  gantryT = 0;
+  gantryDir = 1;
+  gantryHolding = false;
+  // reset pallet counts
+  for (let i = 0; i < palletCounts.length; i++) palletCounts[i] = 0;
+  // reset box queue to single test box
+  boxQueue.length = 0;
+  boxQueue.push(boxColors[0]);
   log('Reset');
 });
 
