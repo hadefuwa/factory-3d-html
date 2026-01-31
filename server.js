@@ -2,6 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const WebSocket = require('ws');
+const { logError } = require('./error-log');
 
 const root = __dirname;
 const logDir = path.join(process.env.USERPROFILE || process.env.HOME, 'Documents', 'factory-3d-html', 'logs');
@@ -60,6 +61,14 @@ const port = 8000;
 server.listen(port, () => {
   console.log(`Server running at http://127.0.0.1:${port}`);
   console.log(`Log file: ${logFile}`);
+  console.log(`Error log: ${path.join(__dirname, 'app-errors.log')}`);
+}).on('error', (err) => {
+  logError(`Server error: ${err.message}`);
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\nPort ${port} is already in use.`);
+    console.error(`Run: Stop-Process -Id (Get-NetTCPConnection -LocalPort ${port}).OwningProcess -Force\n`);
+  }
+  process.exit(1);
 });
 
 // ============================================

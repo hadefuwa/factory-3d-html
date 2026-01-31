@@ -437,23 +437,31 @@ window.addEventListener('keydown', (e) => {
 
 // Robot Arm (simple stylized)
 const robot = new THREE.Group();
+const robotBaseX = 3.0;
+const robotBaseZ = 1.0;
+
 const base = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.4, 0.3, 20), new THREE.MeshStandardMaterial({ color: 0xbfbfbf }));
-base.position.set(4.8, 0.15, 3);
+base.position.set(0, 0.15, 0);
 robot.add(base);
 
 const arm1 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.2, 0.4), new THREE.MeshStandardMaterial({ color: 0xd0d0d0 }));
-arm1.position.set(4.8, 0.9, 3);
+arm1.position.set(0, 0.9, 0);
 robot.add(arm1);
 
 const arm2 = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.25, 0.25), new THREE.MeshStandardMaterial({ color: 0xd0d0d0 }));
-arm2.position.set(5.5, 1.35, 3);
+arm2.position.set(0.7, 1.35, 0);
 robot.add(arm2);
 
 const gripper = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 0.3), new THREE.MeshStandardMaterial({ color: 0x999999 }));
-gripper.position.set(6.2, 1.25, 3);
+gripper.position.set(1.4, 1.25, 0);
 robot.add(gripper);
 
+robot.position.set(robotBaseX, 0, robotBaseZ);
 scene.add(robot);
+
+// Robot animation state
+let robotAnimT = 0;
+let robotState = 'idle'; // idle, reaching, grabbing, returning, placing
 
 // ============================================
 // 3D Status Indicators for Equipment
@@ -485,7 +493,7 @@ const statusIndicators = {
   gantry: createStatusLight(gantryX, gantryY + 0.8, gantryZ, 'Gantry'),
   conveyor1: createStatusLight(0, conveyorHeight + 0.6, -3, 'Conv1'),
   conveyor2: createStatusLight(0, conveyorHeight + 0.6, 3, 'Conv2'),
-  robot: createStatusLight(4.8, 2.0, 3, 'Robot')
+  robot: createStatusLight(3.0, 2.0, 1.0, 'Robot')
 };
 
 // Function to update 3D status indicator colors
@@ -526,10 +534,10 @@ function update3DStatusIndicators() {
 // ============================================
 
 const sortingBays = [
-  { name: 'Steel', position: new THREE.Vector3(6.5, 0.35, 2.3), count: 0, maxStack: 4 },
-  { name: 'Aluminum', position: new THREE.Vector3(7.5, 0.35, 2.3), count: 0, maxStack: 4 },
-  { name: 'Plastic Yellow', position: new THREE.Vector3(6.5, 0.35, 3.7), count: 0, maxStack: 4 },
-  { name: 'Plastic Purple', position: new THREE.Vector3(7.5, 0.35, 3.7), count: 0, maxStack: 4 }
+  { name: 'Steel', position: new THREE.Vector3(2.0, 0.35, -1.5), count: 0, maxStack: 4 },
+  { name: 'Aluminum', position: new THREE.Vector3(3.0, 0.35, -1.5), count: 0, maxStack: 4 },
+  { name: 'Plastic Yellow', position: new THREE.Vector3(2.0, 0.35, -0.5), count: 0, maxStack: 4 },
+  { name: 'Plastic Purple', position: new THREE.Vector3(3.0, 0.35, -0.5), count: 0, maxStack: 4 }
 ];
 
 function getSortingBayPosition(bayIndex) {
@@ -585,14 +593,105 @@ sortingBays.forEach((bay, index) => {
 });
 
 // ============================================
+// Coordinate Grid Helper (for debugging)
+// ============================================
+
+const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
+gridHelper.position.y = 0.01;
+scene.add(gridHelper);
+
+// Axis helper at origin
+const axisHelper = new THREE.AxesHelper(2);
+axisHelper.position.y = 0.02;
+scene.add(axisHelper);
+
+// Hover tile highlight
+const hoverTile = new THREE.Mesh(
+  new THREE.PlaneGeometry(1, 1),
+  new THREE.MeshBasicMaterial({ 
+    color: 0x00ff00, 
+    transparent: true, 
+    opacity: 0.3,
+    side: THREE.DoubleSide
+  })
+);
+hoverTile.rotation.x = -Math.PI / 2;
+hoverTile.position.y = 0.02;
+hoverTile.visible = false;
+scene.add(hoverTile);
+
+// Raycaster for mouse position
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let mouseWorldPos = null;
+
+// Mouse move handler
+window.addEventListener('mousemove', (event) => {
+  // Calculate mouse position in normalized device coordinates (-1 to +1)
+  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+  
+  // Raycast to floor
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObject(floor);
+  
+  if (intersects.length > 0) {
+    const point = intersects[0].point;
+    mouseWorldPos = point;
+    
+    // Snap to grid (1m tiles)
+    const gridX = Math.round(point.x);
+    const gridZ = Math.round(point.z);
+    
+    // Update hover tile
+    hoverTile.position.set(gridX, 0.02, gridZ);
+    hoverTile.visible = true;
+    
+    // Update UI
+    document.getElementById('mouseX').textContent = gridX.toFixed(1);
+    document.getElementById('mouseZ').textContent = gridZ.toFixed(1);
+  } else {
+    hoverTile.visible = false;
+    document.getElementById('mouseX').textContent = '-';
+    document.getElementById('mouseZ').textContent = '-';
+  }
+});
+
+// Click to log coordinates
+window.addEventListener('click', (event) => {
+  if (mouseWorldPos) {
+    const gridX = Math.round(mouseWorldPos.x);
+    const gridZ = Math.round(mouseWorldPos.z);
+    log(`CLICK at X:${gridX} Z:${gridZ}`);
+    console.log(`%c📍 Clicked Coordinates: X=${gridX}, Z=${gridZ}`, 'color: #4CAF50; font-weight: bold; font-size: 14px;');
+  }
+});
+
+// Add coordinate markers
+function addCoordinateMarker(x, z, label) {
+  const markerGeo = new THREE.SphereGeometry(0.1, 8, 8);
+  const markerMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+  const marker = new THREE.Mesh(markerGeo, markerMat);
+  marker.position.set(x, 0.1, z);
+  scene.add(marker);
+  log(`Marker "${label}" at X:${x.toFixed(2)} Z:${z.toFixed(2)}`);
+}
+
+// Mark key positions
+addCoordinateMarker(2.3, 3, 'Conv2End'); // Where box stops on conveyor
+addCoordinateMarker(3.0, 1.0, 'RobotBase'); // Robot base
+addCoordinateMarker(2.0, -1.5, 'Bay1'); // First sorting bay
+
+// ============================================
 // Sensor System
 // ============================================
 
 const sensors = {
   conv1End: { position: -2.5, active: false }, // End of conveyor 1
+  conv2Start: { position: -2.5, active: false }, // Start of conveyor 2 (gantry drop)
   metalSensor1: { position: 0, active: false }, // Steel detector on conv2
   metalSensor2: { position: 1.5, active: false }, // Aluminum detector on conv2
-  conv2End: { position: 5.5, active: false } // End of conveyor 2
+  conv2End: { position: 2.3, active: false } // End of conveyor 2 (before robot)
 };
 
 // Visual sensor indicators
@@ -608,9 +707,10 @@ function createSensorIndicator(x, y, z, label) {
 
 const sensorIndicators = {
   conv1End: createSensorIndicator(-2.5, conveyorHeight + 0.3, -3, 'Conv1 End'),
+  conv2Start: createSensorIndicator(-2.5, conveyorHeight + 0.3, 3, 'Conv2 Start'),
   metalSensor1: createSensorIndicator(0, conveyorHeight + 0.3, 3, 'Metal 1'),
   metalSensor2: createSensorIndicator(1.5, conveyorHeight + 0.3, 3, 'Metal 2'),
-  conv2End: createSensorIndicator(5.5, conveyorHeight + 0.3, 3, 'Conv2 End')
+  conv2End: createSensorIndicator(2.3, conveyorHeight + 0.3, 3, 'Conv2 End')
 };
 
 function updateSensorIndicator(sensorKey, active) {
@@ -750,6 +850,111 @@ function updateGantry(delta) {
 }
 
 // ============================================
+// Robot Arm Animation
+// ============================================
+
+let currentRobotBox = null;
+const conveyorEndPos = new THREE.Vector3(2.3, conveyorHeight + 0.35, 3); // Where box waits on conveyor
+
+function updateRobotArm(delta) {
+  // Animate robot arm based on state
+  if (robotState === 'idle') {
+    // Reset to home position
+    robot.rotation.y = Math.PI;
+    arm2.rotation.z = 0;
+    return;
+  }
+  
+  if (robotState === 'reaching') {
+    robotAnimT += delta * 2;
+    const t = Math.min(robotAnimT, 1);
+    
+    // Rotate 90 degrees LEFT from home position to reach conveyor
+    const conveyorAngle = Math.PI + Math.PI / 2; // 270° = -90° (left turn)
+    robot.rotation.y = Math.PI * (1 - t) + conveyorAngle * t;
+    arm2.rotation.z = -Math.PI * 0.2 * t; // Extend arm
+    
+    if (robotAnimT >= 1) {
+      robotState = 'grabbing';
+      robotAnimT = 0;
+      log(`Robot reaching conveyor at 90° left`);
+    }
+  }
+  
+  if (robotState === 'grabbing') {
+    robotAnimT += delta * 2;
+    
+    // Attach box to gripper after grab delay
+    if (currentRobotBox && robotAnimT >= 0.3) {
+      const gripperWorldPos = new THREE.Vector3();
+      gripper.getWorldPosition(gripperWorldPos);
+      currentRobotBox.position.set(gripperWorldPos.x, conveyorHeight + 0.35, gripperWorldPos.z);
+      
+      if (robotAnimT === 0.3) {
+        log(`Box grabbed at X:${gripperWorldPos.x.toFixed(2)} Z:${gripperWorldPos.z.toFixed(2)}`);
+      }
+    }
+    
+    if (robotAnimT >= 1) {
+      robotState = 'returning';
+      robotAnimT = 0;
+    }
+  }
+  
+  if (robotState === 'returning') {
+    robotAnimT += delta * 1.5;
+    const t = Math.min(robotAnimT, 1);
+    
+    // Rotate 90 degrees RIGHT from home position to reach pallet
+    if (currentRobotBox) {
+      const conveyorAngle = Math.PI + Math.PI / 2; // Where we picked up (270°)
+      const palletAngle = Math.PI - Math.PI / 2; // 90° (right turn from home)
+      
+      // Interpolate from conveyor angle to pallet angle
+      robot.rotation.y = conveyorAngle * (1 - t) + palletAngle * t;
+      arm2.rotation.z = -Math.PI * 0.2 * (1 - t);
+      
+      // Keep box attached to gripper
+      const gripperWorldPos = new THREE.Vector3();
+      gripper.getWorldPosition(gripperWorldPos);
+      currentRobotBox.position.set(gripperWorldPos.x, conveyorHeight + 0.35, gripperWorldPos.z);
+    }
+    
+    if (robotAnimT >= 1) {
+      robotState = 'placing';
+      robotAnimT = 0;
+    }
+  }
+  
+  if (robotState === 'placing') {
+    robotAnimT += delta * 2;
+    
+    if (robotAnimT >= 0.5 && currentRobotBox) {
+      // Place the box in sorting bay
+      const bayIndex = currentRobotBox.userData.material.bay;
+      const bayPos = getSortingBayPosition(bayIndex);
+      
+      if (bayPos) {
+        currentRobotBox.position.set(bayPos.x, bayPos.y, bayPos.z);
+        currentRobotBox.userData.state = 'done';
+        
+        if (!currentRobotBox.userData.completed) {
+          metrics.boxCompleted(currentRobotBox.uuid);
+          currentRobotBox.userData.completed = true;
+        }
+        
+        log(`Robot: Sorted to ${sortingBays[bayIndex].name} bay at X:${bayPos.x.toFixed(2)} Z:${bayPos.z.toFixed(2)}`);
+      }
+      
+      currentRobotBox = null;
+      robotState = 'idle';
+      robotAnimT = 0;
+      metrics.setEquipmentStatus('robot', 'ready');
+    }
+  }
+}
+
+// ============================================
 // Main Process State Machine
 // ============================================
 
@@ -760,6 +965,34 @@ function updateBoxes(delta) {
   let onPallet = 0;
   let defectsRejected = 0;
 
+  // Check if conveyors should be running
+  let conv1Running = true;
+  let conv2Running = false; // Only runs when start sensor is triggered
+  
+  // Stop conveyor 1 if any box is at the sensor or being inspected
+  for (const box of boxes) {
+    if (box.userData.state === 'inspecting' || box.userData.state === 'ready_for_gantry' || box.userData.state === 'rejecting') {
+      conv1Running = false;
+      break;
+    }
+  }
+  
+  // Conveyor 2 runs only if boxes are on it and none are waiting at end sensor
+  let boxesOnConv2 = false;
+  let boxAtConv2End = false;
+  
+  for (const box of boxes) {
+    if (box.userData.state === 'on_conv2') {
+      boxesOnConv2 = true;
+    }
+    if (box.userData.state === 'waiting_robot') {
+      boxAtConv2End = true;
+      break;
+    }
+  }
+  
+  conv2Running = boxesOnConv2 && !boxAtConv2End;
+
   for (const box of boxes) {
     const state = box.userData.state;
 
@@ -769,52 +1002,29 @@ function updateBoxes(delta) {
     else inTransit++;
 
     switch (state) {
-      case ''on_conv1'':
+      case 'on_conv1':
         // Move on conveyor 1 toward sensor at end
-        metrics.setEquipmentStatus(''conveyor1'', ''running'');
         const conv1Target = sensors.conv1End.position;
-
-        // Check if another box is blocking with improved collision detection
-        let canMoveConv1 = true;
-        const boxSize = 0.35; // box dimensions
-        const safetyMargin = 0.05; // small buffer for safety
-        const minDistance = boxSize + safetyMargin;
-
-        for (const other of boxes) {
-          if (other === box || other.userData.state !== ''on_conv1'') continue;
-          
-          // Calculate actual distance between box centers
-          const dx = box.position.x - other.position.x;
-          const dz = Math.abs(box.position.z - other.position.z);
-          
-          // Only block if boxes are on same Z position and too close in X direction
-          if (dz < boxSize && dx > 0 && dx < minDistance) {
-            canMoveConv1 = false;
-            break;
+        
+        // Check if any other box is too close ahead
+        let canMove1 = conv1Running;
+        if (canMove1) {
+          for (const other of boxes) {
+            if (other === box || other.userData.state !== 'on_conv1') continue;
+            // Check if other box is ahead (smaller X) and too close
+            if (other.position.x < box.position.x && (box.position.x - other.position.x) < 0.5) {
+              canMove1 = false;
+              break;
+            }
           }
         }
-
-        if (canMoveConv1 && box.position.x > conv1Target) {
+        
+        // Only move if conveyor is running and no collision
+        if (canMove1 && box.position.x > conv1Target) {
           box.position.x -= delta * 0.8; // conveyor speed
         }
-
-        // Reached sensor at end
-        if (box.position.x <= conv1Target + 0.05) {
-          box.position.x = conv1Target;
-          box.userData.state = ''inspecting'';
-          box.userData.t = 0;
-          sensors.conv1End.active = true;
-          updateSensorIndicator(''conv1End'', true);
-          metrics.setEquipmentStatus(''conveyor1'', ''idle'');
-          log(`Sensor 1: Cube detected, inspection starting`);
-        }
-        break;
-          }
-        }
-
-        if (canMoveConv1 && box.position.x > conv1Target) {
-          box.position.x -= delta * 0.8; // conveyor speed
-        }
+        
+        metrics.setEquipmentStatus('conveyor1', conv1Running ? 'running' : 'idle');
 
         // Reached sensor at end
         if (box.position.x <= conv1Target + 0.05) {
@@ -842,7 +1052,7 @@ function updateBoxes(delta) {
             log(`Vision: DEFECT detected - ${box.userData.material.name}`);
           } else {
             box.userData.state = 'ready_for_gantry';
-            gantryActive = true;
+            // Gantry will be activated by updateGantry function
             log(`Vision: OK - ${box.userData.material.name}`);
           }
         }
@@ -875,13 +1085,21 @@ function updateBoxes(delta) {
           box.userData.state = 'on_conv2';
           box.position.set(-2.5, conveyorHeight + 0.35, 3);
           gantryHolding = false;
-          log(`Gantry: Placed on conveyor 2`);
+          // Trigger start sensor when cube is placed
+          sensors.conv2Start.active = true;
+          updateSensorIndicator('conv2Start', true);
+          log(`Gantry: Placed on conveyor 2, start sensor triggered`);
         }
         break;
 
       case 'on_conv2':
         // Move on conveyor 2, passing metal sensors
-        metrics.setEquipmentStatus('conveyor2', 'running');
+        
+        // Clear start sensor when box moves away from drop point
+        if (box.position.x > sensors.conv2Start.position + 0.3) {
+          sensors.conv2Start.active = false;
+          updateSensorIndicator('conv2Start', false);
+        }
 
         // Check metal sensors
         if (Math.abs(box.position.x - sensors.metalSensor1.position) < 0.2) {
@@ -904,19 +1122,25 @@ function updateBoxes(delta) {
 
         const conv2Target = sensors.conv2End.position;
 
-        // Check blocking
-        let canMoveConv2 = true;
-        for (const other of boxes) {
-          if (other === box || other.userData.state !== 'on_conv2') continue;
-          if (other.position.x > box.position.x && (other.position.x - box.position.x) < 0.6) {
-            canMoveConv2 = false;
-            break;
+        // Check if any other box is too close ahead
+        let canMove2 = conv2Running;
+        if (canMove2) {
+          for (const other of boxes) {
+            if (other === box || other.userData.state !== 'on_conv2') continue;
+            // Check if other box is ahead (larger X) and too close
+            if (other.position.x > box.position.x && (other.position.x - box.position.x) < 0.5) {
+              canMove2 = false;
+              break;
+            }
           }
         }
 
-        if (canMoveConv2 && box.position.x < conv2Target) {
+        // Only move if conveyor is running and no collision
+        if (canMove2 && box.position.x < conv2Target) {
           box.position.x += delta * 0.8;
         }
+        
+        metrics.setEquipmentStatus('conveyor2', conv2Running ? 'running' : 'idle');
 
         // Reached end sensor
         if (box.position.x >= conv2Target - 0.05) {
@@ -931,30 +1155,22 @@ function updateBoxes(delta) {
         break;
 
       case 'waiting_robot':
-        // Robot picking and sorting
+        // Robot picking and sorting with animation
         box.userData.t += delta;
         metrics.setEquipmentStatus('robot', 'active');
 
-        if (box.userData.t > 2.0) { // robot pick time
+        // Start robot animation once
+        if (box.userData.t < 0.1 && robotState === 'idle') {
+          robotState = 'reaching';
+          robotAnimT = 0;
+          currentRobotBox = box;
           sensors.conv2End.active = false;
           updateSensorIndicator('conv2End', false);
-
-          const bayIndex = box.userData.material.bay;
-          const bayPos = getSortingBayPosition(bayIndex);
-
-          if (bayPos) {
-            box.position.set(bayPos.x, bayPos.y, bayPos.z);
-            box.userData.state = 'done';
-            metrics.setEquipmentStatus('robot', 'ready');
-
-            if (!box.userData.completed) {
-              metrics.boxCompleted(box.uuid);
-              box.userData.completed = true;
-            }
-
-            log(`Robot: Sorted to ${sortingBays[bayIndex].name} bay`);
-          }
         }
+        
+        // Box stays at conveyor until grabbed (during 'grabbing' state)
+        // After that, the robot animation handles the box position
+        
         break;
 
       case 'done':
@@ -999,6 +1215,7 @@ function animate() {
     }
 
     updateGantry(delta);
+    updateRobotArm(delta);
     updateBoxes(delta);
     updatePiston(delta);
 
