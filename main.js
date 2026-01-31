@@ -198,6 +198,7 @@ let spawnTimer = 0;
 let paused = false;
 let gantryT = 0;
 let gantryDir = 1;
+let gantryHolding = false;
 
 function updateGantry(delta) {
   gantryT += delta * gantryDir * 0.3;
@@ -212,12 +213,15 @@ function updateGantry(delta) {
 
   // bob the gripper
   gantryGrip.position.y = gripOffsetY + Math.sin(performance.now() * 0.002) * 0.05;
+  // visual: dim gripper when empty
+  gantryGrip.material.color.set(gantryHolding ? 0xaaaaaa : 0x555555);
 }
 
 function updateBoxes(delta) {
   for (const box of boxes) {
     const state = box.userData.state;
     if (state === 'on1') {
+      gantryHolding = false;
       // move east -> west on top conveyor (right to left)
       const targetX = -2.5; // end of conveyor 1 (left end)
       // simple spacing: don't move if too close to next box ahead
@@ -239,11 +243,13 @@ function updateBoxes(delta) {
         box.userData.state = 'lift';
       }
     } else if (state === 'lift') {
+      gantryHolding = true;
       // snap to gantry cart
       box.position.copy(gantryCart.position).add(new THREE.Vector3(0, -0.6, 0));
       if (gantryT > 0.9) {
         box.userData.state = 'on2';
         box.position.set(-2.5, 0.6, 3);
+        gantryHolding = false;
         log('Drop to conveyor 2');
       }
     } else if (state === 'on2') {
