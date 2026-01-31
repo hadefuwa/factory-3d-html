@@ -1,0 +1,16 @@
+{
+  "name": "smart-factory-digital-twin",
+  "version": "1.0.0",
+  "description": "Smart Factory Digital Twin with real-time metrics and hybrid data support",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": ["digital-twin", "smart-factory", "iot", "three.js"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.14.2"
+  }
+}

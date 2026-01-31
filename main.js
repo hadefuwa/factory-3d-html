@@ -21,6 +21,285 @@ function log(msg) {
 window.__getLog = () => logBuffer.join('\n');
 log('App start');
 
+// ============================================
+// Digital Twin Metrics & Data Tracking System
+// ============================================
+
+class MetricsTracker {
+  constructor() {
+    this.startTime = Date.now();
+    this.boxesProcessed = 0;
+    this.boxStartTimes = new Map(); // track individual box cycle times
+    this.cycleTimes = [];
+    this.throughputHistory = []; // { timestamp, count }
+    this.lastThroughputUpdate = Date.now();
+    this.boxesInLastMinute = 0;
+
+    // Equipment status
+    this.equipment = {
+      gantry: { status: 'idle', utilization: 0, lastActive: 0 },
+      conveyor1: { status: 'running', utilization: 100 },
+      conveyor2: { status: 'running', utilization: 100 },
+      robot: { status: 'ready', utilization: 0, lastActive: 0 }
+    };
+
+    // Queue tracking
+    this.queueStats = {
+      waiting: 0,
+      inTransit: 0,
+      onPallet: 0
+    };
+  }
+
+  // Called when a box starts its journey
+  boxStarted(boxId) {
+    this.boxStartTimes.set(boxId, Date.now());
+  }
+
+  // Called when a box completes its journey
+  boxCompleted(boxId) {
+    const startTime = this.boxStartTimes.get(boxId);
+    if (startTime) {
+      const cycleTime = (Date.now() - startTime) / 1000; // seconds
+      this.cycleTimes.push(cycleTime);
+      if (this.cycleTimes.length > 100) this.cycleTimes.shift(); // keep last 100
+      this.boxStartTimes.delete(boxId);
+    }
+    this.boxesProcessed++;
+    this.boxesInLastMinute++;
+  }
+
+  // Update throughput calculations
+  updateThroughput() {
+    const now = Date.now();
+    const timeSince = (now - this.lastThroughputUpdate) / 1000;
+
+    if (timeSince >= 1.0) { // update every second
+      const rate = this.boxesInLastMinute / (timeSince / 60); // boxes per minute
+      this.throughputHistory.push({ timestamp: now, rate });
+
+      // keep last 60 seconds
+      const cutoff = now - 60000;
+      this.throughputHistory = this.throughputHistory.filter(h => h.timestamp > cutoff);
+
+      this.lastThroughputUpdate = now;
+      this.boxesInLastMinute = 0;
+    }
+  }
+
+  // Get average cycle time
+  getAvgCycleTime() {
+    if (this.cycleTimes.length === 0) return 0;
+    const sum = this.cycleTimes.reduce((a, b) => a + b, 0);
+    return sum / this.cycleTimes.length;
+  }
+
+  // Get current throughput (boxes/min)
+  getCurrentThroughput() {
+    if (this.throughputHistory.length === 0) return 0;
+    // average of last few readings
+    const recent = this.throughputHistory.slice(-10);
+    const sum = recent.reduce((a, b) => a + b.rate, 0);
+    return sum / recent.length;
+  }
+
+  // Update equipment status
+  setEquipmentStatus(equipmentId, status) {
+    if (this.equipment[equipmentId]) {
+      this.equipment[equipmentId].status = status;
+      if (status === 'running' || status === 'active') {
+        this.equipment[equipmentId].lastActive = Date.now();
+      }
+    }
+  }
+
+  // Update queue statistics
+  updateQueueStats(waiting, inTransit, onPallet) {
+    this.queueStats.waiting = waiting;
+    this.queueStats.inTransit = inTransit;
+    this.queueStats.onPallet = onPallet;
+  }
+
+  // API for external data injection (for hybrid mode)
+  injectExternalData(data) {
+    // This allows real sensor data to override simulated data
+    if (data.equipment) {
+      Object.keys(data.equipment).forEach(key => {
+        if (this.equipment[key]) {
+          this.equipment[key] = { ...this.equipment[key], ...data.equipment[key] };
+        }
+      });
+    }
+    if (data.throughput !== undefined) {
+      this.throughputHistory.push({
+        timestamp: Date.now(),
+        rate: data.throughput
+      });
+    }
+    log('External data injected: ' + JSON.stringify(data));
+  }
+}
+
+const metrics = new MetricsTracker();
+window.__metrics = metrics; // expose for external access
+
+// Make metrics available globally for real data injection
+window.injectFactoryData = (data) => {
+  metrics.injectExternalData(data);
+};
+
+// ============================================
+// WebSocket Connection for Real-Time Data
+// ============================================
+
+let ws = null;
+let wsReconnectTimeout = null;
+
+function connectWebSocket() {
+  try {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}`;
+
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      log('WebSocket connected - ready for real-time data');
+      console.log('[WebSocket] Connected to server');
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+
+        if (message.type === 'factoryData') {
+          // Inject external data into metrics
+          metrics.injectExternalData(message.data);
+          console.log('[WebSocket] Data injected:', message.data);
+        } else if (message.type === 'connected') {
+          console.log('[WebSocket]', message.message);
+        }
+      } catch (e) {
+        console.error('[WebSocket] Message parse error:', e);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.log('[WebSocket] Connection error (expected if no WebSocket server)');
+    };
+
+    ws.onclose = () => {
+      console.log('[WebSocket] Connection closed');
+      ws = null;
+
+      // Attempt to reconnect after 5 seconds
+      if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
+      wsReconnectTimeout = setTimeout(() => {
+        console.log('[WebSocket] Attempting to reconnect...');
+        connectWebSocket();
+      }, 5000);
+    };
+  } catch (e) {
+    console.log('[WebSocket] Not available - running in simulation mode');
+  }
+}
+
+// Connect to WebSocket if available
+connectWebSocket();
+
+log('Metrics tracker initialized');
+
+// ============================================
+// Dashboard UI Update Functions
+// ============================================
+
+function updateDashboard() {
+  // Update throughput
+  const throughput = metrics.getCurrentThroughput();
+  document.getElementById('throughput').textContent = throughput.toFixed(1) + ' boxes/min';
+
+  // Update boxes processed
+  document.getElementById('boxesProcessed').textContent = metrics.boxesProcessed;
+
+  // Update average cycle time
+  const avgCycle = metrics.getAvgCycleTime();
+  document.getElementById('cycleTime').textContent = avgCycle.toFixed(1) + 's';
+
+  // Update equipment status
+  updateEquipmentUI('gantry', metrics.equipment.gantry.status);
+  updateEquipmentUI('conv1', metrics.equipment.conveyor1.status);
+  updateEquipmentUI('conv2', metrics.equipment.conveyor2.status);
+  updateEquipmentUI('robot', metrics.equipment.robot.status);
+
+  // Update queue stats
+  document.getElementById('queueWaiting').textContent = metrics.queueStats.waiting;
+  document.getElementById('inTransit').textContent = metrics.queueStats.inTransit;
+  document.getElementById('onPallet').textContent = metrics.queueStats.onPallet;
+
+  // Update throughput chart
+  updateThroughputChart();
+}
+
+function updateEquipmentUI(equipmentId, status) {
+  const indicator = document.getElementById(equipmentId + '-status');
+  const stateText = document.getElementById(equipmentId + '-state');
+
+  // Update indicator class
+  indicator.className = 'status-indicator';
+  if (status === 'running' || status === 'active') {
+    indicator.classList.add('running');
+    stateText.textContent = status === 'running' ? 'Running' : 'Active';
+  } else if (status === 'idle' || status === 'ready') {
+    indicator.classList.add('idle');
+    stateText.textContent = status === 'idle' ? 'Idle' : 'Ready';
+  } else {
+    indicator.classList.add('stopped');
+    stateText.textContent = 'Stopped';
+  }
+}
+
+function updateThroughputChart() {
+  const canvas = document.getElementById('throughputChart');
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+
+  // Clear canvas
+  ctx.clearRect(0, 0, width, height);
+
+  const history = metrics.throughputHistory;
+  if (history.length < 2) return;
+
+  // Find max for scaling
+  const maxRate = Math.max(...history.map(h => h.rate), 1);
+
+  // Draw chart
+  ctx.strokeStyle = '#4CAF50';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+
+  history.forEach((point, i) => {
+    const x = (i / (history.length - 1)) * width;
+    const y = height - (point.rate / maxRate) * height;
+    if (i === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  });
+
+  ctx.stroke();
+
+  // Draw baseline
+  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, height);
+  ctx.lineTo(width, height);
+  ctx.stroke();
+}
+
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
 camera.position.set(0, 8, 14);
 camera.lookAt(0, 0, 0);
@@ -176,83 +455,250 @@ robot.add(gripper);
 
 scene.add(robot);
 
-// Pallet
-const pallet = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.15, 1.2), new THREE.MeshStandardMaterial({ color: 0x6b4e2e }));
-pallet.position.set(7.2, 0.08, 3);
-scene.add(pallet);
+// ============================================
+// 3D Status Indicators for Equipment
+// ============================================
 
-// Pallet sections (4 zones, each can stack 4 boxes)
-const palletZones = [
-  new THREE.Vector3(6.6, 0.35, 2.6),
-  new THREE.Vector3(7.6, 0.35, 2.6),
-  new THREE.Vector3(6.6, 0.35, 3.4),
-  new THREE.Vector3(7.6, 0.35, 3.4)
-];
-const palletCounts = [0,0,0,0];
-function getNextPalletSlot() {
-  // fill zones in order, stack up to 4
-  for (let i = 0; i < palletZones.length; i++) {
-    if (palletCounts[i] < 4) {
-      const base = palletZones[i];
-      const y = base.y + (palletCounts[i] * 0.38);
-      palletCounts[i]++;
-      return { x: base.x, y, z: base.z };
-    }
-  }
-  return { x: 7.6, y: 0.35, z: 3.4 };
+// Create status lights for equipment
+function createStatusLight(x, y, z, label) {
+  const light = new THREE.Mesh(
+    new THREE.SphereGeometry(0.15, 16, 16),
+    new THREE.MeshStandardMaterial({
+      color: 0x00ff00,
+      emissive: 0x00ff00,
+      emissiveIntensity: 0.5
+    })
+  );
+  light.position.set(x, y, z);
+  scene.add(light);
+
+  // Add point light for glow effect
+  const pointLight = new THREE.PointLight(0x00ff00, 0.5, 3);
+  pointLight.position.set(x, y, z);
+  scene.add(pointLight);
+
+  return { mesh: light, light: pointLight, label };
 }
+
+// Status indicators for each equipment
+const statusIndicators = {
+  gantry: createStatusLight(gantryX, gantryY + 0.8, gantryZ, 'Gantry'),
+  conveyor1: createStatusLight(0, conveyorHeight + 0.6, -3, 'Conv1'),
+  conveyor2: createStatusLight(0, conveyorHeight + 0.6, 3, 'Conv2'),
+  robot: createStatusLight(4.8, 2.0, 3, 'Robot')
+};
+
+// Function to update 3D status indicator colors
+function update3DStatusIndicators() {
+  Object.keys(statusIndicators).forEach(key => {
+    const indicator = statusIndicators[key];
+    const status = metrics.equipment[key]?.status || 'idle';
+
+    let color;
+    let intensity;
+
+    switch (status) {
+      case 'running':
+      case 'active':
+        color = 0x00ff00; // green
+        intensity = 0.8;
+        break;
+      case 'idle':
+      case 'ready':
+        color = 0xffaa00; // yellow/orange
+        intensity = 0.4;
+        break;
+      default:
+        color = 0xff0000; // red
+        intensity = 0.2;
+    }
+
+    indicator.mesh.material.color.setHex(color);
+    indicator.mesh.material.emissive.setHex(color);
+    indicator.mesh.material.emissiveIntensity = intensity;
+    indicator.light.color.setHex(color);
+    indicator.light.intensity = intensity;
+  });
+}
+
+// ============================================
+// Sorting Bays (4 bays for different materials)
+// ============================================
+
+const sortingBays = [
+  { name: 'Steel', position: new THREE.Vector3(6.5, 0.35, 2.3), count: 0, maxStack: 4 },
+  { name: 'Aluminum', position: new THREE.Vector3(7.5, 0.35, 2.3), count: 0, maxStack: 4 },
+  { name: 'Plastic Yellow', position: new THREE.Vector3(6.5, 0.35, 3.7), count: 0, maxStack: 4 },
+  { name: 'Plastic Purple', position: new THREE.Vector3(7.5, 0.35, 3.7), count: 0, maxStack: 4 }
+];
+
+function getSortingBayPosition(bayIndex) {
+  const bay = sortingBays[bayIndex];
+  if (!bay) return null;
+
+  const y = bay.position.y + (bay.count * 0.38);
+  bay.count++;
+
+  return { x: bay.position.x, y, z: bay.position.z };
+}
+
+// ============================================
+// Sorting Bay 3D Models
+// ============================================
+
+// Create visual bays for sorted materials
+sortingBays.forEach((bay, index) => {
+  const bayBase = new THREE.Mesh(
+    new THREE.BoxGeometry(0.8, 0.1, 0.8),
+    new THREE.MeshStandardMaterial({ color: 0x6b4e2e, roughness: 0.8 })
+  );
+  bayBase.position.set(bay.position.x, 0.05, bay.position.z);
+  scene.add(bayBase);
+
+  // Bay walls (3 sides)
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x4a4a4a, roughness: 0.7 });
+
+  const backWall = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.05), wallMat);
+  backWall.position.set(bay.position.x, 0.3, bay.position.z - 0.375);
+  scene.add(backWall);
+
+  const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.6, 0.8), wallMat);
+  leftWall.position.set(bay.position.x - 0.375, 0.3, bay.position.z);
+  scene.add(leftWall);
+
+  const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.6, 0.8), wallMat);
+  rightWall.position.set(bay.position.x + 0.375, 0.3, bay.position.z);
+  scene.add(rightWall);
+
+  // Bay label (tiny indicator light matching material)
+  const materialColors = [0xbfbfbf, 0x999999, 0xd4b000, 0x7a4cff];
+  const label = new THREE.Mesh(
+    new THREE.SphereGeometry(0.08, 12, 12),
+    new THREE.MeshStandardMaterial({
+      color: materialColors[index],
+      emissive: materialColors[index],
+      emissiveIntensity: 0.5
+    })
+  );
+  label.position.set(bay.position.x, 0.7, bay.position.z - 0.45);
+  scene.add(label);
+});
+
+// ============================================
+// Sensor System
+// ============================================
+
+const sensors = {
+  conv1End: { position: -2.5, active: false }, // End of conveyor 1
+  metalSensor1: { position: 0, active: false }, // Steel detector on conv2
+  metalSensor2: { position: 1.5, active: false }, // Aluminum detector on conv2
+  conv2End: { position: 5.5, active: false } // End of conveyor 2
+};
+
+// Visual sensor indicators
+function createSensorIndicator(x, y, z, label) {
+  const indicator = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.8),
+    new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 0.3 })
+  );
+  indicator.position.set(x, y, z);
+  scene.add(indicator);
+  return indicator;
+}
+
+const sensorIndicators = {
+  conv1End: createSensorIndicator(-2.5, conveyorHeight + 0.3, -3, 'Conv1 End'),
+  metalSensor1: createSensorIndicator(0, conveyorHeight + 0.3, 3, 'Metal 1'),
+  metalSensor2: createSensorIndicator(1.5, conveyorHeight + 0.3, 3, 'Metal 2'),
+  conv2End: createSensorIndicator(5.5, conveyorHeight + 0.3, 3, 'Conv2 End')
+};
+
+function updateSensorIndicator(sensorKey, active) {
+  const indicator = sensorIndicators[sensorKey];
+  if (indicator) {
+    indicator.material.color.setHex(active ? 0x00ff00 : 0xff0000);
+    indicator.material.emissive.setHex(active ? 0x00ff00 : 0xff0000);
+    indicator.material.emissiveIntensity = active ? 0.8 : 0.3;
+  }
+}
+
+// ============================================
+// Material & Defect System
+// ============================================
+
+const MATERIALS = {
+  STEEL: { color: 0xbfbfbf, name: 'Steel', isMetal: true, bay: 0 },
+  ALUMINUM: { color: 0x999999, name: 'Aluminum', isMetal: true, bay: 1 },
+  PLASTIC_YELLOW: { color: 0xd4b000, name: 'Plastic Yellow', isMetal: false, bay: 2 },
+  PLASTIC_PURPLE: { color: 0x7a4cff, name: 'Plastic Purple', isMetal: false, bay: 3 }
+};
+
+const DEFECT_RATE = 0.15; // 15% defect rate
 
 // Boxes
-const boxColors = [0xbfbfbf, 0x999999, 0xd4b000, 0x7a4cff];
 const boxes = [];
-const boxQueue = [];
-let releaseQueue = [];
+const hopperQueue = [];
 
-// Preload 16 boxes in a stack at the start (4 purple, 4 yellow, 4 grey, 4 silver)
-const order = [0x7a4cff, 0xd4b000, 0x999999, 0xbfbfbf];
-for (const color of order) {
-  for (let i = 0; i < 4; i++) boxQueue.push(color);
-}
+// Create hopper queue with mixed materials (16 cubes total)
+function initializeHopper() {
+  hopperQueue.length = 0;
+  const materialTypes = Object.values(MATERIALS);
 
-function shuffle(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
+  for (let i = 0; i < 16; i++) {
+    const material = materialTypes[i % 4];
+    const isDefect = Math.random() < DEFECT_RATE;
+    hopperQueue.push({
+      material,
+      isDefect,
+      id: `cube_${Date.now()}_${i}`
+    });
+  }
+
+  // Shuffle for realistic mixed hopper
+  for (let i = hopperQueue.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+    [hopperQueue[i], hopperQueue[j]] = [hopperQueue[j], hopperQueue[i]];
   }
-  return arr;
+
+  log(`Hopper initialized with ${hopperQueue.length} cubes (${Math.round(DEFECT_RATE * 100)}% defect rate)`);
 }
 
-function spawnStack() {
-  const colors = shuffle([...boxQueue]);
-  const cols = 4; // x
-  const rows = 2; // z
-  const layers = 2; // y (max 3)
-  const startX = 2.5;
-  const startZ = -3;
-  let i = 0;
-  releaseQueue = [];
-  for (let y = 0; y < layers; y++) {
-    for (let z = 0; z < rows; z++) {
-      for (let x = 0; x < cols; x++) {
-        if (i >= colors.length) break;
-        const color = colors[i++];
-        const box = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), new THREE.MeshStandardMaterial({ color }));
-        const px = startX + (x * 0.4);
-        const py = 0.6 + (y * 0.38);
-        const pz = startZ + (z * 0.4);
-        box.position.set(px, py, pz);
-        box.userData = { state: 'stacked', t: 0 };
-        scene.add(box);
-        boxes.push(box);
-        releaseQueue.push(box);
-      }
-    }
-  }
-  log('Spawned mixed 16-box stack');
-}
+// ============================================
+// Cube Spawning & Hopper System
+// ============================================
 
-let spawnTimer = 0;
-let stackSpawned = false;
+let autoReleaseTimer = 0;
+const AUTO_RELEASE_INTERVAL = 3.0; // seconds between auto-releases
+
+function spawnCubeFromHopper() {
+  if (hopperQueue.length === 0) {
+    log('Hopper empty - cycle complete');
+    return null;
+  }
+
+  const cubeData = hopperQueue.shift();
+  const box = new THREE.Mesh(
+    new THREE.BoxGeometry(0.35, 0.35, 0.35),
+    new THREE.MeshStandardMaterial({ color: cubeData.material.color })
+  );
+
+  // Start position at hopper/beginning of conveyor 1
+  box.position.set(2.5, conveyorHeight + 0.35, -3);
+  box.userData = {
+    state: 'on_conv1',
+    material: cubeData.material,
+    isDefect: cubeData.isDefect,
+    id: cubeData.id,
+    t: 0
+  };
+
+  scene.add(box);
+  boxes.push(box);
+  metrics.boxStarted(box.uuid);
+
+  log(`Released: ${cubeData.material.name}${cubeData.isDefect ? ' [DEFECT]' : ''}`);
+  return box;
+}
 
 // Animation state
 let paused = false;
@@ -262,96 +708,280 @@ let gantryHolding = false;
 let gantryActive = false;
 
 function updateGantry(delta) {
-  // start moving only when active
-  if (gantryActive) {
-    gantryT += delta * gantryDir * 0.3;
-    if (gantryT > 1) { gantryT = 1; gantryDir = -1; }
-    if (gantryT < 0) { gantryT = 0; gantryDir = 1; gantryActive = false; }
+  // Check if any cube is ready for pickup
+  if (!gantryHolding && !gantryActive) {
+    for (const box of boxes) {
+      if (box.userData.state === 'ready_for_gantry') {
+        gantryActive = true;
+        gantryT = 0;
+        gantryDir = 1;
+        box.userData.state = 'gantry_lift';
+        break;
+      }
+    }
   }
 
-  // Move straight along Z between conveyors at fixed X (vertical movement)
+  // Move gantry
+  if (gantryActive) {
+    gantryT += delta * gantryDir * 0.3;
+
+    if (gantryT >= 1) {
+      gantryT = 1;
+      gantryDir = -1;
+    }
+
+    if (gantryT <= 0 && gantryDir === -1) {
+      gantryT = 0;
+      gantryDir = 1;
+      gantryActive = false;
+      metrics.setEquipmentStatus('gantry', 'idle');
+    }
+  }
+
+  // Move straight along Z between conveyors at fixed X
   const pickup = new THREE.Vector3(gantryX, gantryY, -3);
   const drop = new THREE.Vector3(gantryX, gantryY, 3);
   const pos = pickup.clone().lerp(drop, gantryT);
   gantryCart.position.copy(pos);
 
-  // bob the gripper
+  // Bob the gripper
   gantryGrip.position.y = gripOffsetY + Math.sin(performance.now() * 0.002) * 0.05;
-  // visual: dim gripper when empty
   gantryGrip.material.color.set(gantryHolding ? 0xaaaaaa : 0x555555);
 }
 
+// ============================================
+// Main Process State Machine
+// ============================================
+
 function updateBoxes(delta) {
+  // Count boxes in different states for metrics
+  let waiting = hopperQueue.length;
+  let inTransit = 0;
+  let onPallet = 0;
+  let defectsRejected = 0;
+
   for (const box of boxes) {
     const state = box.userData.state;
-    if (state === 'on1') {
-      gantryHolding = false;
-      // move east -> west on top conveyor (right to left)
-      const targetX = -2.5; // end of conveyor 1 (left end)
-      // simple spacing: don't move if too close to next box ahead
-      let canMove = true;
-      for (const other of boxes) {
-        if (other === box) continue;
-        if (other.userData.state === 'on1' && other.position.z === box.position.z) {
-          if (other.position.x < box.position.x && (box.position.x - other.position.x) < 0.6) {
-            canMove = false;
+
+    // Track stats
+    if (state === 'done') onPallet++;
+    else if (state === 'rejected') defectsRejected++;
+    else inTransit++;
+
+    switch (state) {
+      case 'on_conv1':
+        // Move on conveyor 1 toward sensor at end
+        metrics.setEquipmentStatus('conveyor1', 'running');
+        const conv1Target = sensors.conv1End.position;
+
+        // Check if another box is blocking
+        let canMoveConv1 = true;
+        for (const other of boxes) {
+          if (other === box || other.userData.state !== 'on_conv1') continue;
+          if (Math.abs(other.position.z - box.position.z) < 0.4 &&
+              other.position.x < box.position.x &&
+              (box.position.x - other.position.x) < 0.6) {
+            canMoveConv1 = false;
             break;
           }
         }
-      }
-      if (canMove && box.position.x > targetX) {
-        box.position.x -= delta * 1.0;
-      }
-      if (box.position.x <= targetX + 0.01) {
-        box.position.x = targetX;
-        box.userData.state = 'lift';
-        gantryActive = true; // start gantry travel when box ready
-      }
-    } else if (state === 'lift') {
-      gantryHolding = true;
-      // snap to gantry cart
-      box.position.copy(gantryCart.position).add(new THREE.Vector3(0, -0.6, 0));
-      if (gantryT > 0.9) {
-        box.userData.state = 'on2';
-        box.position.set(-2.5, 0.6, 3);
-        gantryHolding = false;
-        log('Drop to conveyor 2');
-      }
-    } else if (state === 'on2') {
-      box.position.x += delta * 1.0;
-      if (box.position.x >= 5.5) {
-        box.userData.state = 'wait_robot';
-        box.userData.wait = 0;
-        box.position.x = 5.5;
-        log('Reached robot/pallet');
-      }
-    } else if (state === 'wait_robot') {
-      // wait at end of southern conveyor
-      box.userData.wait += delta;
-      if (box.userData.wait > 1.5) {
-        box.userData.state = 'sorted';
-      }
-    } else if (state === 'sorted') {
-      // place on pallet at blue mark (end of conveyor 2)
-      const slot = getNextPalletSlot();
-      box.position.set(slot.x, slot.y, slot.z);
-      box.userData.state = 'done';
+
+        if (canMoveConv1 && box.position.x > conv1Target) {
+          box.position.x -= delta * 0.8; // conveyor speed
+        }
+
+        // Reached sensor at end
+        if (box.position.x <= conv1Target + 0.05) {
+          box.position.x = conv1Target;
+          box.userData.state = 'inspecting';
+          box.userData.t = 0;
+          sensors.conv1End.active = true;
+          updateSensorIndicator('conv1End', true);
+          metrics.setEquipmentStatus('conveyor1', 'idle');
+          log(`Sensor 1: Cube detected, inspection starting`);
+        }
+        break;
+
+      case 'inspecting':
+        // Camera inspecting cube for color and defects
+        box.userData.t += delta;
+
+        if (box.userData.t > 1.5) { // inspection takes 1.5 seconds
+          sensors.conv1End.active = false;
+          updateSensorIndicator('conv1End', false);
+
+          if (box.userData.isDefect) {
+            box.userData.state = 'rejecting';
+            box.userData.t = 0;
+            log(`Vision: DEFECT detected - ${box.userData.material.name}`);
+          } else {
+            box.userData.state = 'ready_for_gantry';
+            gantryActive = true;
+            log(`Vision: OK - ${box.userData.material.name}`);
+          }
+        }
+        break;
+
+      case 'rejecting':
+        // Piston pushes defect off conveyor
+        box.userData.t += delta;
+        const pushAmount = Math.min(box.userData.t * 2, 1.2);
+        box.position.z = -3 - pushAmount;
+        box.position.y = Math.max(0.2, conveyorHeight + 0.35 - box.userData.t * 0.5);
+
+        if (box.userData.t > 1.5) {
+          box.userData.state = 'rejected';
+          log(`Defect rejected into bin`);
+        }
+        break;
+
+      case 'ready_for_gantry':
+        // Waiting for gantry pickup
+        break;
+
+      case 'gantry_lift':
+        // Gantry picking up cube
+        gantryHolding = true;
+        metrics.setEquipmentStatus('gantry', 'active');
+        box.position.copy(gantryCart.position).add(new THREE.Vector3(0, -0.6, 0));
+
+        if (gantryT > 0.95) {
+          box.userData.state = 'on_conv2';
+          box.position.set(-2.5, conveyorHeight + 0.35, 3);
+          gantryHolding = false;
+          log(`Gantry: Placed on conveyor 2`);
+        }
+        break;
+
+      case 'on_conv2':
+        // Move on conveyor 2, passing metal sensors
+        metrics.setEquipmentStatus('conveyor2', 'running');
+
+        // Check metal sensors
+        if (Math.abs(box.position.x - sensors.metalSensor1.position) < 0.2) {
+          const detected = box.userData.material.isMetal && box.userData.material.name === 'Steel';
+          sensors.metalSensor1.active = detected;
+          updateSensorIndicator('metalSensor1', detected);
+        } else {
+          sensors.metalSensor1.active = false;
+          updateSensorIndicator('metalSensor1', false);
+        }
+
+        if (Math.abs(box.position.x - sensors.metalSensor2.position) < 0.2) {
+          const detected = box.userData.material.isMetal && box.userData.material.name === 'Aluminum';
+          sensors.metalSensor2.active = detected;
+          updateSensorIndicator('metalSensor2', detected);
+        } else {
+          sensors.metalSensor2.active = false;
+          updateSensorIndicator('metalSensor2', false);
+        }
+
+        const conv2Target = sensors.conv2End.position;
+
+        // Check blocking
+        let canMoveConv2 = true;
+        for (const other of boxes) {
+          if (other === box || other.userData.state !== 'on_conv2') continue;
+          if (other.position.x > box.position.x && (other.position.x - box.position.x) < 0.6) {
+            canMoveConv2 = false;
+            break;
+          }
+        }
+
+        if (canMoveConv2 && box.position.x < conv2Target) {
+          box.position.x += delta * 0.8;
+        }
+
+        // Reached end sensor
+        if (box.position.x >= conv2Target - 0.05) {
+          box.position.x = conv2Target;
+          box.userData.state = 'waiting_robot';
+          box.userData.t = 0;
+          sensors.conv2End.active = true;
+          updateSensorIndicator('conv2End', true);
+          metrics.setEquipmentStatus('conveyor2', 'idle');
+          log(`Sensor 2: Cube at end, robot picking`);
+        }
+        break;
+
+      case 'waiting_robot':
+        // Robot picking and sorting
+        box.userData.t += delta;
+        metrics.setEquipmentStatus('robot', 'active');
+
+        if (box.userData.t > 2.0) { // robot pick time
+          sensors.conv2End.active = false;
+          updateSensorIndicator('conv2End', false);
+
+          const bayIndex = box.userData.material.bay;
+          const bayPos = getSortingBayPosition(bayIndex);
+
+          if (bayPos) {
+            box.position.set(bayPos.x, bayPos.y, bayPos.z);
+            box.userData.state = 'done';
+            metrics.setEquipmentStatus('robot', 'ready');
+
+            if (!box.userData.completed) {
+              metrics.boxCompleted(box.uuid);
+              box.userData.completed = true;
+            }
+
+            log(`Robot: Sorted to ${sortingBays[bayIndex].name} bay`);
+          }
+        }
+        break;
+
+      case 'done':
+      case 'rejected':
+        // Nothing to do
+        break;
     }
   }
+
+  // Update metrics
+  metrics.updateQueueStats(waiting, inTransit, onPallet);
 }
+
+let cycleInitialized = false;
 
 function animate() {
   requestAnimationFrame(animate);
+
   if (!paused) {
     const delta = 0.016;
-    if (!stackSpawned) {
-      spawnStack();
-      stackSpawned = true;
+
+    // Initialize hopper on first run
+    if (!cycleInitialized) {
+      initializeHopper();
+      cycleInitialized = true;
     }
+
+    // Auto-release cubes from hopper
+    autoReleaseTimer += delta;
+    if (autoReleaseTimer >= AUTO_RELEASE_INTERVAL && hopperQueue.length > 0) {
+      // Only release if no cube is currently being inspected or rejected
+      const canRelease = !boxes.some(b =>
+        b.userData.state === 'inspecting' ||
+        b.userData.state === 'rejecting' ||
+        b.userData.state === 'ready_for_gantry'
+      );
+
+      if (canRelease) {
+        spawnCubeFromHopper();
+        autoReleaseTimer = 0;
+      }
+    }
+
     updateGantry(delta);
     updateBoxes(delta);
     updatePiston(delta);
+
+    // Update metrics and dashboard
+    metrics.updateThroughput();
+    updateDashboard();
+    update3DStatusIndicators();
   }
+
   controls.update();
   renderer.render(scene, camera);
 }
@@ -371,24 +1001,43 @@ toggleBtn.addEventListener('click', () => {
 });
 
 resetBtn.addEventListener('click', () => {
+  // Clear all boxes
   for (const b of boxes) scene.remove(b);
   boxes.length = 0;
-  spawnTimer = 0;
+
+  // Reset gantry
   gantryT = 0;
   gantryDir = 1;
   gantryHolding = false;
-  stackSpawned = false;
-  releaseQueue = [];
-  // reset pallet counts
-  for (let i = 0; i < palletCounts.length; i++) palletCounts[i] = 0;
-  log('Reset');
+  gantryActive = false;
+
+  // Reset bays
+  sortingBays.forEach(bay => bay.count = 0);
+
+  // Reset sensors
+  Object.keys(sensors).forEach(key => {
+    sensors[key].active = false;
+    updateSensorIndicator(key, false);
+  });
+
+  // Reinitialize hopper
+  cycleInitialized = false;
+  autoReleaseTimer = 0;
+
+  // Reset metrics
+  window.location.reload();
+  log('System reset');
 });
 
 releaseBtn.addEventListener('click', () => {
-  if (releaseQueue.length === 0) return;
-  const box = releaseQueue.shift();
-  box.userData.state = 'on1';
-  log('Released 1 box');
+  // Manual release trigger (useful for testing)
+  if (hopperQueue.length > 0) {
+    spawnCubeFromHopper();
+    autoReleaseTimer = 0;
+    log('Manual release triggered');
+  } else {
+    log('Hopper empty');
+  }
 });
 
 downloadLogBtn.addEventListener('click', () => {

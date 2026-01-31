@@ -10,6 +10,22 @@
     #ui button { margin-right:6px; }
     #legend span { display:inline-block; width:10px; height:10px; margin-right:6px; vertical-align:middle; }
     #legend div { margin-top:4px; }
+
+    #dashboard { position:fixed; top:10px; right:10px; z-index:10; background:rgba(0,0,0,0.8); padding:15px; border-radius:8px; font-size:12px; width:280px; border:1px solid rgba(255,255,255,0.1); }
+    #dashboard h3 { margin:0 0 10px 0; font-size:14px; color:#4CAF50; border-bottom:1px solid rgba(255,255,255,0.2); padding-bottom:8px; }
+    .metric-row { display:flex; justify-content:space-between; margin:6px 0; padding:6px 8px; background:rgba(255,255,255,0.05); border-radius:4px; }
+    .metric-label { color:#aaa; font-size:11px; }
+    .metric-value { color:#fff; font-weight:600; font-size:13px; }
+    .metric-value.good { color:#4CAF50; }
+    .metric-value.warning { color:#FFC107; }
+    .metric-value.error { color:#f44336; }
+    .status-indicator { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; }
+    .status-indicator.running { background:#4CAF50; animation:pulse 2s infinite; }
+    .status-indicator.idle { background:#FFC107; }
+    .status-indicator.stopped { background:#666; }
+    @keyframes pulse { 0%, 100% { opacity:1; } 50% { opacity:0.5; } }
+    .section { margin-top:12px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.1); }
+    .chart-mini { height:40px; background:rgba(0,0,0,0.3); border-radius:4px; margin-top:8px; position:relative; overflow:hidden; }
   </style>
 </head>
 <body>
@@ -17,12 +33,12 @@
     <div><strong>Smart Factory Demo</strong></div>
     <div style="margin-top:6px;">
       <button id="toggle">Pause</button>
-      <button id="reset">Reset</button>
-      <button id="release">Release 1 box</button>
+      <button id="reset">Reset Cycle</button>
+      <button id="release">Manual Release</button>
       <button id="downloadLog">Download log</button>
     </div>
     <div style="margin-top:6px; font-size:12px; color:#bbb;">
-      Gantry move: Arrow keys (hold Shift = faster)
+      Auto-release: Every 3s | Gantry: Arrow keys
     </div>
     <div id="legend" style="margin-top:8px;">
       <div><span style="background:#bfbfbf"></span>Silver</div>
@@ -31,6 +47,65 @@
       <div><span style="background:#7a4cff"></span>Purple</div>
     </div>
   </div>
+
+  <div id="dashboard">
+    <h3>📊 Live Metrics</h3>
+
+    <div class="metric-row">
+      <span class="metric-label">Throughput</span>
+      <span class="metric-value" id="throughput">0 boxes/min</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Boxes Processed</span>
+      <span class="metric-value" id="boxesProcessed">0</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Avg Cycle Time</span>
+      <span class="metric-value" id="cycleTime">0.0s</span>
+    </div>
+
+    <div class="section">
+      <div style="font-size:11px; color:#aaa; margin-bottom:8px;">Equipment Status</div>
+      <div class="metric-row">
+        <span class="metric-label"><span class="status-indicator running" id="gantry-status"></span>Gantry</span>
+        <span class="metric-value" id="gantry-state">Idle</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label"><span class="status-indicator running" id="conv1-status"></span>Conveyor 1</span>
+        <span class="metric-value" id="conv1-state">Running</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label"><span class="status-indicator running" id="conv2-status"></span>Conveyor 2</span>
+        <span class="metric-value" id="conv2-state">Running</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label"><span class="status-indicator idle" id="robot-status"></span>Robot</span>
+        <span class="metric-value" id="robot-state">Ready</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <div style="font-size:11px; color:#aaa; margin-bottom:8px;">Queue Status</div>
+      <div class="metric-row">
+        <span class="metric-label">Waiting to Release</span>
+        <span class="metric-value" id="queueWaiting">0</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">In Transit</span>
+        <span class="metric-value" id="inTransit">0</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">On Pallet</span>
+        <span class="metric-value good" id="onPallet">0</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <div style="font-size:11px; color:#aaa; margin-bottom:4px;">Production Rate (last 60s)</div>
+      <canvas id="throughputChart" class="chart-mini" width="250" height="40"></canvas>
+    </div>
+  </div>
+
   <script type="importmap">
     {
       "imports": {
