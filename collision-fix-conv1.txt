@@ -1,0 +1,14 @@
+﻿// Fix collision detection for conveyor 1
+const boxSize = 0.35;
+const safetyMargin = 0.05;
+const minDistance = boxSize + safetyMargin;
+
+for (const other of boxes) {
+  if (other === box || other.userData.state !== 'on_conv1') continue;
+  const dx = box.position.x - other.position.x;
+  const dz = Math.abs(box.position.z - other.position.z);
+  if (dz < boxSize && dx > 0 && dx < minDistance) {
+    canMoveConv1 = false;
+    break;
+  }
+}
