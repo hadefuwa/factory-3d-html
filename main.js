@@ -207,22 +207,29 @@ const boxColors = [0xbfbfbf, 0x999999, 0xd4b000, 0x7a4cff];
 const boxes = [];
 const boxQueue = [];
 
-// Preload 1 box for sequence testing (single at a time)
-boxQueue.push(boxColors[0]);
+// Preload 16 boxes in a stack at the start (4 purple, 4 yellow, 4 grey, 4 silver)
+const order = [0x7a4cff, 0xd4b000, 0x999999, 0xbfbfbf];
+for (const color of order) {
+  for (let i = 0; i < 4; i++) boxQueue.push(color);
+}
 
-function spawnBox() {
-  if (boxQueue.length === 0) return;
-  const color = boxQueue.shift();
-  const box = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), new THREE.MeshStandardMaterial({ color }));
-  // spawn at red mark (east end of top conveyor)
-  box.position.set(2.5, 0.6, -3);
-  box.userData = { state: 'on1', t: 0 };
-  scene.add(box);
-  boxes.push(box);
-  log('Spawn box');
+function spawnStack() {
+  let index = 0;
+  for (const color of boxQueue) {
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), new THREE.MeshStandardMaterial({ color }));
+    // stack at red mark (east end of top conveyor)
+    const y = 0.6 + (index * 0.38);
+    box.position.set(2.5, y, -3);
+    box.userData = { state: 'on1', t: 0 };
+    scene.add(box);
+    boxes.push(box);
+    index++;
+  }
+  log('Spawned stack of 16');
 }
 
 let spawnTimer = 0;
+let stackSpawned = false;
 
 // Animation state
 let paused = false;
@@ -314,10 +321,9 @@ function animate() {
   requestAnimationFrame(animate);
   if (!paused) {
     const delta = 0.016;
-    spawnTimer += delta;
-    if (spawnTimer > 1.6 && boxes.length < 1) {
-      spawnTimer = 0;
-      spawnBox();
+    if (!stackSpawned) {
+      spawnStack();
+      stackSpawned = true;
     }
     updateGantry(delta);
     updateBoxes(delta);
@@ -347,11 +353,9 @@ resetBtn.addEventListener('click', () => {
   gantryT = 0;
   gantryDir = 1;
   gantryHolding = false;
+  stackSpawned = false;
   // reset pallet counts
   for (let i = 0; i < palletCounts.length; i++) palletCounts[i] = 0;
-  // reset box queue to single test box
-  boxQueue.length = 0;
-  boxQueue.push(boxColors[0]);
   log('Reset');
 });
 
