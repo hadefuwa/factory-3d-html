@@ -11,6 +11,12 @@ function log(msg) {
   logBuffer.push(line);
   if (logBuffer.length > 2000) logBuffer.shift();
   console.log(line);
+  // send to local server log
+  fetch('/log', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: msg })
+  }).catch(() => {});
 }
 window.__getLog = () => logBuffer.join('\n');
 log('App start');
