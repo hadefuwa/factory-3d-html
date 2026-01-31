@@ -77,6 +77,31 @@ function makeConveyor(x, z) {
 const conveyor1 = makeConveyor(0, 3); // top
 const conveyor2 = makeConveyor(0, -3); // bottom
 
+// Labels
+const labelCanvas = (text) => {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.fillStyle = '#fff';
+  ctx.font = '28px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, c.width / 2, c.height / 2);
+  const tex = new THREE.CanvasTexture(c);
+  const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(2, 0.5, 1);
+  return sprite;
+};
+const label1 = labelCanvas('Conveyor 1 (North)');
+label1.position.set(0, 1.6, 3.8);
+scene.add(label1);
+const label2 = labelCanvas('Conveyor 2 (South)');
+label2.position.set(0, 1.6, -3.8);
+scene.add(label2);
+
 // Gantry
 const gantry = new THREE.Group();
 const gantryBeam = new THREE.Mesh(
