@@ -150,9 +150,16 @@ scene.add(pallet);
 // Boxes
 const boxColors = [0xbfbfbf, 0x999999, 0xd4b000, 0x7a4cff];
 const boxes = [];
+const boxQueue = [];
+
+// Preload 16 boxes: 4 of each color
+for (const color of boxColors) {
+  for (let i = 0; i < 4; i++) boxQueue.push(color);
+}
 
 function spawnBox() {
-  const color = boxColors[Math.floor(Math.random() * boxColors.length)];
+  if (boxQueue.length === 0) return;
+  const color = boxQueue.shift();
   const box = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), new THREE.MeshStandardMaterial({ color }));
   box.position.set(2.5, 0.6, 3);
   box.userData = { state: 'on1', t: 0 };
@@ -218,7 +225,7 @@ function animate() {
   if (!paused) {
     const delta = 0.016;
     spawnTimer += delta;
-    if (spawnTimer > 1.6 && boxes.length < 12) {
+    if (spawnTimer > 1.6 && boxes.length < 16) {
       spawnTimer = 0;
       spawnBox();
     }
