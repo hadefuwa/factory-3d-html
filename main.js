@@ -177,15 +177,14 @@ const boxColors = [0xbfbfbf, 0x999999, 0xd4b000, 0x7a4cff];
 const boxes = [];
 const boxQueue = [];
 
-// Preload 16 boxes: 4 of each color
-for (const color of boxColors) {
-  for (let i = 0; i < 4; i++) boxQueue.push(color);
-}
+// Preload 1 box for sequence testing (single at a time)
+boxQueue.push(boxColors[0]);
 
 function spawnBox() {
   if (boxQueue.length === 0) return;
   const color = boxQueue.shift();
   const box = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), new THREE.MeshStandardMaterial({ color }));
+  // spawn at red mark (east end of top conveyor)
   box.position.set(2.5, 0.6, 3);
   box.userData = { state: 'on1', t: 0 };
   scene.add(box);
@@ -220,7 +219,7 @@ function updateBoxes(delta) {
     const state = box.userData.state;
     if (state === 'on1') {
       // move east -> west on top conveyor (right to left)
-      const targetX = -2.5; // end of conveyor 1
+      const targetX = -2.5; // end of conveyor 1 (left end)
       // simple spacing: don't move if too close to next box ahead
       let canMove = true;
       for (const other of boxes) {
@@ -254,8 +253,8 @@ function updateBoxes(delta) {
         log('Reached robot/pallet');
       }
     } else if (state === 'sorted') {
-      // place on pallet
-      box.position.set(6.6 + (Math.random() - 0.5) * 0.6, 0.35, -3 + (Math.random() - 0.5) * 0.6);
+      // place on pallet at blue mark (end of conveyor 2)
+      box.position.set(6.6, 0.35, -3);
       box.userData.state = 'done';
     }
   }
@@ -266,7 +265,7 @@ function animate() {
   if (!paused) {
     const delta = 0.016;
     spawnTimer += delta;
-    if (spawnTimer > 1.6 && boxes.length < 16) {
+    if (spawnTimer > 1.6 && boxes.length < 1) {
       spawnTimer = 0;
       spawnBox();
     }
