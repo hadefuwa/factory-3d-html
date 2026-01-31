@@ -145,9 +145,30 @@ robot.add(gripper);
 scene.add(robot);
 
 // Pallet
-const pallet = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.15, 1.0), new THREE.MeshStandardMaterial({ color: 0x6b4e2e }));
-pallet.position.set(6.6, 0.08, 3);
+const pallet = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.15, 1.2), new THREE.MeshStandardMaterial({ color: 0x6b4e2e }));
+pallet.position.set(7.2, 0.08, 3);
 scene.add(pallet);
+
+// Pallet sections (4 zones, each can stack 4 boxes)
+const palletZones = [
+  new THREE.Vector3(6.6, 0.35, 2.6),
+  new THREE.Vector3(7.6, 0.35, 2.6),
+  new THREE.Vector3(6.6, 0.35, 3.4),
+  new THREE.Vector3(7.6, 0.35, 3.4)
+];
+const palletCounts = [0,0,0,0];
+function getNextPalletSlot() {
+  // fill zones in order, stack up to 4
+  for (let i = 0; i < palletZones.length; i++) {
+    if (palletCounts[i] < 4) {
+      const base = palletZones[i];
+      const y = base.y + (palletCounts[i] * 0.38);
+      palletCounts[i]++;
+      return { x: base.x, y, z: base.z };
+    }
+  }
+  return { x: 7.6, y: 0.35, z: 3.4 };
+}
 
 // Boxes
 const boxColors = [0xbfbfbf, 0x999999, 0xd4b000, 0x7a4cff];
@@ -232,12 +253,21 @@ function updateBoxes(delta) {
     } else if (state === 'on2') {
       box.position.x += delta * 1.0;
       if (box.position.x >= 5.5) {
-        box.userData.state = 'sorted';
+        box.userData.state = 'wait_robot';
+        box.userData.wait = 0;
+        box.position.x = 5.5;
         log('Reached robot/pallet');
+      }
+    } else if (state === 'wait_robot') {
+      // wait at end of southern conveyor
+      box.userData.wait += delta;
+      if (box.userData.wait > 1.5) {
+        box.userData.state = 'sorted';
       }
     } else if (state === 'sorted') {
       // place on pallet at blue mark (end of conveyor 2)
-      box.position.set(6.6, 0.35, 3);
+      const slot = getNextPalletSlot();
+      box.position.set(slot.x, slot.y, slot.z);
       box.userData.state = 'done';
     }
   }
