@@ -27,7 +27,14 @@
       <div><span style="background:#7a4cff"></span>Purple</div>
     </div>
   </div>
-  <script type="module" src="main.js"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
   <script>
     const diag = document.createElement('div');
     diag.id = 'diag';
@@ -44,9 +51,18 @@
     diag.style.display = 'none';
     document.body.appendChild(diag);
 
+    function logServer(msg) {
+      fetch('/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg })
+      }).catch(() => {});
+    }
+
     function showDiag(msg) {
       diag.style.display = 'block';
       diag.textContent = msg;
+      logServer('DIAG: ' + msg);
     }
 
     window.addEventListener('error', (e) => {
@@ -63,6 +79,13 @@
         showDiag('3D view failed to load.\nIf this keeps happening, try a different browser or send me this message.');
       }
     }, 2000);
+  </script>
+  <script type="module">
+    import('./main.js').catch(err => {
+      const msg = err && err.message ? err.message : String(err);
+      const evt = new Error('Module load failed: ' + msg);
+      window.dispatchEvent(new ErrorEvent('error', { message: evt.message }));
+    });
   </script>
 </body>
 </html>
