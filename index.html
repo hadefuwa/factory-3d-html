@@ -27,5 +27,24 @@
     </div>
   </div>
   <script type="module" src="main.js"></script>
+  <script>
+    // basic fallback message if modules fail
+    setTimeout(() => {
+      const canvas = document.querySelector('canvas');
+      if (!canvas) {
+        const msg = document.createElement('div');
+        msg.style.position = 'fixed';
+        msg.style.top = '50%';
+        msg.style.left = '50%';
+        msg.style.transform = 'translate(-50%, -50%)';
+        msg.style.color = '#fff';
+        msg.style.background = 'rgba(0,0,0,0.7)';
+        msg.style.padding = '12px 16px';
+        msg.style.borderRadius = '8px';
+        msg.innerText = '3D view failed to load. Try refreshing or different network.';
+        document.body.appendChild(msg);
+      }
+    }, 2000);
+  </script>
 </body>
 </html>
