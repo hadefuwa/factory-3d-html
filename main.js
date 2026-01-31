@@ -226,14 +226,18 @@ let spawnTimer = 0;
 
 // Animation state
 let paused = false;
-let gantryT = 0;
+let gantryT = 0; // 0 = at conveyor 1 (north), 1 = at conveyor 2 (south)
 let gantryDir = 1;
 let gantryHolding = false;
+let gantryActive = false;
 
 function updateGantry(delta) {
-  gantryT += delta * gantryDir * 0.3;
-  if (gantryT > 1) { gantryT = 1; gantryDir = -1; }
-  if (gantryT < 0) { gantryT = 0; gantryDir = 1; }
+  // start moving only when active
+  if (gantryActive) {
+    gantryT += delta * gantryDir * 0.3;
+    if (gantryT > 1) { gantryT = 1; gantryDir = -1; }
+    if (gantryT < 0) { gantryT = 0; gantryDir = 1; gantryActive = false; }
+  }
 
   // Move straight along Z between conveyors at fixed X (vertical movement)
   const pickup = new THREE.Vector3(gantryX, gantryY, -3);
@@ -271,6 +275,7 @@ function updateBoxes(delta) {
       if (box.position.x <= targetX + 0.01) {
         box.position.x = targetX;
         box.userData.state = 'lift';
+        gantryActive = true; // start gantry travel when box ready
       }
     } else if (state === 'lift') {
       gantryHolding = true;
