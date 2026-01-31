@@ -206,6 +206,7 @@ function getNextPalletSlot() {
 const boxColors = [0xbfbfbf, 0x999999, 0xd4b000, 0x7a4cff];
 const boxes = [];
 const boxQueue = [];
+let releaseQueue = [];
 
 // Preload 16 boxes in a stack at the start (4 purple, 4 yellow, 4 grey, 4 silver)
 const order = [0x7a4cff, 0xd4b000, 0x999999, 0xbfbfbf];
@@ -229,6 +230,7 @@ function spawnStack() {
   const startX = 2.5;
   const startZ = -3;
   let i = 0;
+  releaseQueue = [];
   for (let y = 0; y < layers; y++) {
     for (let z = 0; z < rows; z++) {
       for (let x = 0; x < cols; x++) {
@@ -239,9 +241,10 @@ function spawnStack() {
         const py = 0.6 + (y * 0.38);
         const pz = startZ + (z * 0.4);
         box.position.set(px, py, pz);
-        box.userData = { state: 'on1', t: 0 };
+        box.userData = { state: 'stacked', t: 0 };
         scene.add(box);
         boxes.push(box);
+        releaseQueue.push(box);
       }
     }
   }
@@ -358,6 +361,7 @@ animate();
 // UI
 const toggleBtn = document.getElementById('toggle');
 const resetBtn = document.getElementById('reset');
+const releaseBtn = document.getElementById('release');
 const downloadLogBtn = document.getElementById('downloadLog');
 
 toggleBtn.addEventListener('click', () => {
@@ -374,9 +378,17 @@ resetBtn.addEventListener('click', () => {
   gantryDir = 1;
   gantryHolding = false;
   stackSpawned = false;
+  releaseQueue = [];
   // reset pallet counts
   for (let i = 0; i < palletCounts.length; i++) palletCounts[i] = 0;
   log('Reset');
+});
+
+releaseBtn.addEventListener('click', () => {
+  if (releaseQueue.length === 0) return;
+  const box = releaseQueue.shift();
+  box.userData.state = 'on1';
+  log('Released 1 box');
 });
 
 downloadLogBtn.addEventListener('click', () => {
