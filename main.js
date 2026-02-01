@@ -569,50 +569,57 @@ function update3DStatusIndicators() {
 // Sorting Bays (4 bays for different materials)
 // ============================================
 
+const PLATFORM_HEIGHT = 1.0; // Height of raised platform (1 tile)
+
 const sortingBays = [
-  { name: 'Steel', position: new THREE.Vector3(2.0, 0.35, -1.5), count: 0, maxStack: 4 },
-  { name: 'Aluminum', position: new THREE.Vector3(3.0, 0.35, -1.5), count: 0, maxStack: 4 },
-  { name: 'Plastic Yellow', position: new THREE.Vector3(2.0, 0.35, -0.5), count: 0, maxStack: 4 },
-  { name: 'Plastic Purple', position: new THREE.Vector3(3.0, 0.35, -0.5), count: 0, maxStack: 4 }
+  { name: 'Steel', position: new THREE.Vector3(1.5, PLATFORM_HEIGHT + 0.35, -3.0), count: 0, maxStack: 4, stackOffsetZ: 0.4 },
+  { name: 'Aluminum', position: new THREE.Vector3(2.0, PLATFORM_HEIGHT + 0.35, -3.0), count: 0, maxStack: 4, stackOffsetZ: 0.4 },
+  { name: 'Plastic Yellow', position: new THREE.Vector3(2.5, PLATFORM_HEIGHT + 0.35, -3.0), count: 0, maxStack: 4, stackOffsetZ: 0.4 },
+  { name: 'Plastic Purple', position: new THREE.Vector3(3.0, PLATFORM_HEIGHT + 0.35, -3.0), count: 0, maxStack: 4, stackOffsetZ: 0.4 }
 ];
 
 function getSortingBayPosition(bayIndex) {
   const bay = sortingBays[bayIndex];
   if (!bay) return null;
 
-  const y = bay.position.y + (bay.count * 0.38);
+  // Stack horizontally (along Z axis) instead of vertically
+  const z = bay.position.z + (bay.count * bay.stackOffsetZ);
   bay.count++;
 
-  return { x: bay.position.x, y, z: bay.position.z };
+  return { x: bay.position.x, y: bay.position.y, z };
 }
 
 // ============================================
 // Sorting Bay 3D Models
 // ============================================
 
+// Create thin platform top for sorting bays
+const platformTop = new THREE.Mesh(
+  new THREE.BoxGeometry(2.0, 0.08, 2.0),
+  new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.6, metalness: 0.3 })
+);
+platformTop.position.set(2.25, PLATFORM_HEIGHT, -2.2);
+scene.add(platformTop);
+
+// Platform support poles (cylindrical)
+const poleMaterial = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.5, metalness: 0.4 });
+
+// Single central column
+const centralPole = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.1, 0.1, PLATFORM_HEIGHT, 16),
+  poleMaterial
+);
+centralPole.position.set(2.25, PLATFORM_HEIGHT / 2, -2.2);
+scene.add(centralPole);
+
 // Create visual bays for sorted materials
 sortingBays.forEach((bay, index) => {
   const bayBase = new THREE.Mesh(
-    new THREE.BoxGeometry(0.8, 0.1, 0.8),
+    new THREE.BoxGeometry(0.4, 0.1, 0.4),
     new THREE.MeshStandardMaterial({ color: 0x6b4e2e, roughness: 0.8 })
   );
-  bayBase.position.set(bay.position.x, 0.05, bay.position.z);
+  bayBase.position.set(bay.position.x, PLATFORM_HEIGHT + 0.05, bay.position.z);
   scene.add(bayBase);
-
-  // Bay walls (3 sides)
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0x4a4a4a, roughness: 0.7 });
-
-  const backWall = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.05), wallMat);
-  backWall.position.set(bay.position.x, 0.3, bay.position.z - 0.375);
-  scene.add(backWall);
-
-  const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.6, 0.8), wallMat);
-  leftWall.position.set(bay.position.x - 0.375, 0.3, bay.position.z);
-  scene.add(leftWall);
-
-  const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.6, 0.8), wallMat);
-  rightWall.position.set(bay.position.x + 0.375, 0.3, bay.position.z);
-  scene.add(rightWall);
 
   // Bay label (tiny indicator light matching material)
   const materialColors = [0xbfbfbf, 0x999999, 0xd4b000, 0x7a4cff];
@@ -624,9 +631,27 @@ sortingBays.forEach((bay, index) => {
       emissiveIntensity: 0.5
     })
   );
-  label.position.set(bay.position.x, 0.7, bay.position.z - 0.45);
+  label.position.set(bay.position.x, PLATFORM_HEIGHT + 0.5, bay.position.z - 0.3);
   scene.add(label);
 });
+
+// Central dividers (2 lines creating 4 quadrants)
+const dividerMat = new THREE.MeshStandardMaterial({ color: 0x4a4a4a, roughness: 0.7 });
+
+// Vertical divider (separating columns)
+const verticalDivider1 = new THREE.Mesh(
+  new THREE.BoxGeometry(0.05, 0.3, 2.0),
+  dividerMat
+);
+verticalDivider1.position.set(1.75, PLATFORM_HEIGHT + 0.15, -2.2);
+scene.add(verticalDivider1);
+
+const verticalDivider2 = new THREE.Mesh(
+  new THREE.BoxGeometry(0.05, 0.3, 2.0),
+  dividerMat
+);
+verticalDivider2.position.set(2.75, PLATFORM_HEIGHT + 0.15, -2.2);
+scene.add(verticalDivider2);
 
 // ============================================
 // Coordinate Grid Helper (for debugging)
@@ -814,8 +839,67 @@ function spawnCubeFromHopper() {
   const cubeData = hopperQueue.shift();
   const box = new THREE.Mesh(
     new THREE.BoxGeometry(0.35, 0.35, 0.35),
-    new THREE.MeshStandardMaterial({ color: cubeData.material.color })
+    new THREE.MeshStandardMaterial({ color: 0x1a1a1a }) // Start as dark/unknown
   );
+
+  // Add white "?" marks on all 6 sides using canvas textures
+  const questionMarkGroup = new THREE.Group();
+  
+  // Create a canvas with "?" text
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'white';
+  ctx.font = 'bold 100px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('?', 64, 64);
+  
+  const texture = new THREE.CanvasTexture(canvas);
+  const qMaterial = new THREE.MeshBasicMaterial({ 
+    map: texture, 
+    transparent: true, 
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+  
+  // Top
+  const qTop = new THREE.Mesh(new THREE.PlaneGeometry(0.25, 0.25), qMaterial);
+  qTop.rotation.x = -Math.PI / 2;
+  qTop.position.y = 0.176;
+  questionMarkGroup.add(qTop);
+  
+  // Bottom
+  const qBottom = new THREE.Mesh(new THREE.PlaneGeometry(0.25, 0.25), qMaterial);
+  qBottom.rotation.x = Math.PI / 2;
+  qBottom.position.y = -0.176;
+  questionMarkGroup.add(qBottom);
+  
+  // Front (+Z)
+  const qFront = new THREE.Mesh(new THREE.PlaneGeometry(0.25, 0.25), qMaterial);
+  qFront.position.z = 0.176;
+  questionMarkGroup.add(qFront);
+  
+  // Back (-Z)
+  const qBack = new THREE.Mesh(new THREE.PlaneGeometry(0.25, 0.25), qMaterial);
+  qBack.rotation.y = Math.PI;
+  qBack.position.z = -0.176;
+  questionMarkGroup.add(qBack);
+  
+  // Right (+X)
+  const qRight = new THREE.Mesh(new THREE.PlaneGeometry(0.25, 0.25), qMaterial);
+  qRight.rotation.y = Math.PI / 2;
+  qRight.position.x = 0.176;
+  questionMarkGroup.add(qRight);
+  
+  // Left (-X)
+  const qLeft = new THREE.Mesh(new THREE.PlaneGeometry(0.25, 0.25), qMaterial);
+  qLeft.rotation.y = -Math.PI / 2;
+  qLeft.position.x = -0.176;
+  questionMarkGroup.add(qLeft);
+  
+  box.add(questionMarkGroup);
 
   // Start position at hopper/beginning of conveyor 1
   box.position.set(2.5, conveyorHeight + 0.35, -3);
@@ -824,7 +908,9 @@ function spawnCubeFromHopper() {
     material: cubeData.material,
     isDefect: cubeData.isDefect,
     id: cubeData.id,
-    t: 0
+    t: 0,
+    identityRevealed: false, // Track if identity is revealed
+    questionMark: questionMarkGroup // Store reference to remove later
   };
 
   scene.add(box);
@@ -833,6 +919,23 @@ function spawnCubeFromHopper() {
 
   log(`Released: ${cubeData.material.name}${cubeData.isDefect ? ' [DEFECT]' : ''}`);
   return box;
+}
+
+// Function to reveal box identity (callable from PLC or sensors)
+function revealBoxIdentity(box) {
+  if (!box.userData.identityRevealed) {
+    // Change box color to true material
+    box.material.color.setHex(box.userData.material.color);
+    
+    // Remove question mark
+    if (box.userData.questionMark) {
+      box.remove(box.userData.questionMark);
+      box.userData.questionMark = null;
+    }
+    
+    box.userData.identityRevealed = true;
+    log(`Identity revealed: ${box.userData.material.name}`);
+  }
 }
 
 // Animation state
@@ -1155,6 +1258,11 @@ function updateBoxes(delta) {
           const detected = box.userData.material.isMetal && box.userData.material.name === 'Aluminum';
           sensors.metalSensor2.active = detected;
           updateSensorIndicator('metalSensor2', detected);
+          
+          // Reveal box identity after passing metalSensor2 (simulation mode)
+          if (!box.userData.identityRevealed) {
+            revealBoxIdentity(box);
+          }
         } else {
           sensors.metalSensor2.active = false;
           updateSensorIndicator('metalSensor2', false);
