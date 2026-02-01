@@ -1417,29 +1417,6 @@ resetBtn.addEventListener('click', () => {
   log('System reset');
 });
 
-releaseBtn.addEventListener('click', () => {
-  // Manual release trigger (useful for testing)
-  if (hopperQueue.length > 0) {
-    spawnCubeFromHopper();
-    autoReleaseTimer = 0;
-    log('Manual release triggered');
-  } else {
-    log('Hopper empty');
-  }
-});
-
-downloadLogBtn.addEventListener('click', () => {
-  const blob = new Blob([window.__getLog()], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'factory-demo.log.txt';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-});
-
 // Resize
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
