@@ -361,14 +361,14 @@ const defectBin = new THREE.Mesh(
   new THREE.BoxGeometry(0.6, 0.4, 0.6),
   new THREE.MeshStandardMaterial({ color: 0x444444 })
 );
-defectBin.position.set(-2.9, 0.25, -2.2);
+defectBin.position.set(-2.5, 0.25, -4.0);
 scene.add(defectBin);
 
 const piston = new THREE.Mesh(
-  new THREE.BoxGeometry(0.2, 0.2, 0.6),
+  new THREE.BoxGeometry(0.2, 0.2, 1.0),
   new THREE.MeshStandardMaterial({ color: 0x888888 })
 );
-piston.position.set(-2.9, 0.35, -3.4);
+piston.position.set(-2.5, 0.6, -2.5);
 scene.add(piston);
 
 // Label for defect bin
@@ -376,21 +376,31 @@ const binLabel = new THREE.Mesh(
   new THREE.PlaneGeometry(0.9, 0.25),
   new THREE.MeshStandardMaterial({ color: 0x111111, transparent: true, opacity: 0.8 })
 );
-binLabel.position.set(-2.9, 0.9, -2.2);
+binLabel.position.set(-2.5, 0.9, -4.0);
 binLabel.rotation.y = Math.PI / 4;
 scene.add(binLabel);
 
-// simple piston animation when box reaches defect zone (visual only)
+// Piston animation - only moves when rejecting
+let pistonActive = false;
 let pistonT = 0;
 function updatePiston(delta) {
-  pistonT += delta;
-  const push = Math.sin(pistonT * 2) > 0.8 ? 0.2 : 0;
-  piston.position.z = -3.4 + push;
+  if (pistonActive) {
+    pistonT += delta * 3;
+    const push = Math.sin(pistonT * 4) > 0.5 ? 0.3 : 0;
+    piston.position.z = -2.5 - push;
+  } else {
+    piston.position.z = -2.5;
+    pistonT = 0;
+  }
 }
 
 // Labels removed
 
 // Gantry
+const gantryY = 2.2; // Height above ground
+let gantryX = -2.5; // left end default
+let gantryZ = 0;
+
 const gantry = new THREE.Group();
 const gantryBeam = new THREE.Mesh(
   new THREE.BoxGeometry(0.4, 0.2, conveyorGap + 6.0),
@@ -407,10 +417,22 @@ const gantryGrip = new THREE.Mesh(
   new THREE.MeshStandardMaterial({ color: 0xaaaaaa })
 );
 
-// Position gantry above conveyors (adjustable)
-const gantryY = 2.2;
-let gantryX = -2.5; // left end default
-let gantryZ = 0;
+// Gantry tower legs at X=-3, Z=4 and X=-3, Z=-4
+const gantryLegMaterial = new THREE.MeshStandardMaterial({ color: 0x666666 });
+const gantryLeg1 = new THREE.Mesh(
+  new THREE.BoxGeometry(0.3, gantryY, 0.3),
+  gantryLegMaterial
+);
+gantryLeg1.position.set(-3, gantryY / 2, 4);
+
+const gantryLeg2 = new THREE.Mesh(
+  new THREE.BoxGeometry(0.3, gantryY, 0.3),
+  gantryLegMaterial
+);
+gantryLeg2.position.set(-3, gantryY / 2, -4);
+
+scene.add(gantryLeg1);
+scene.add(gantryLeg2);
 
 gantryBeam.position.set(gantryX, gantryY, gantryZ);
 
@@ -1049,6 +1071,7 @@ function updateBoxes(delta) {
           if (box.userData.isDefect) {
             box.userData.state = 'rejecting';
             box.userData.t = 0;
+            pistonActive = true; // Activate piston for rejection
             log(`Vision: DEFECT detected - ${box.userData.material.name}`);
           } else {
             box.userData.state = 'ready_for_gantry';
@@ -1059,14 +1082,18 @@ function updateBoxes(delta) {
         break;
 
       case 'rejecting':
-        // Piston pushes defect off conveyor
+        // Piston pushes defect off conveyor toward bin
         box.userData.t += delta;
-        const pushAmount = Math.min(box.userData.t * 2, 1.2);
-        box.position.z = -3 - pushAmount;
+        const pushAmount = Math.min(box.userData.t * 2, 2.0);
+        box.position.z = -3 - pushAmount; // Push from conveyor at Z=-3 toward bin at Z=-4
+        box.position.x = -2.5; // Move toward bin X position (aligned with sensor)
         box.position.y = Math.max(0.2, conveyorHeight + 0.35 - box.userData.t * 0.5);
 
         if (box.userData.t > 1.5) {
+          // Place box in bin at X=-2.5, Z=-4.0
+          box.position.set(-2.5, 0.3, -4.0);
           box.userData.state = 'rejected';
+          pistonActive = false; // Deactivate piston after rejection
           log(`Defect rejected into bin`);
         }
         break;
