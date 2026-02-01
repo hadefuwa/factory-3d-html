@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { OPERATION_MODE, MODE } from './io-config.js';
 
 // Debug mode flag - set to true to enable coordinate display and hover tile
 const DEBUG_MODE = false;
@@ -1380,16 +1381,12 @@ function animate() {
 animate();
 
 // UI
-const toggleBtn = document.getElementById('toggle');
 const resetBtn = document.getElementById('reset');
-const releaseBtn = document.getElementById('release');
-const downloadLogBtn = document.getElementById('downloadLog');
 
-toggleBtn.addEventListener('click', () => {
-  paused = !paused;
-  toggleBtn.textContent = paused ? 'Play' : 'Pause';
-  log(paused ? 'Paused' : 'Resumed');
-});
+// Hide reset button in real PLC mode
+if (OPERATION_MODE === MODE.REAL_PLC) {
+  resetBtn.style.display = 'none';
+}
 
 resetBtn.addEventListener('click', () => {
   // Clear all boxes
