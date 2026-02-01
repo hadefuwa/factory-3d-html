@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
+// Debug mode flag - set to true to enable coordinate display and hover tile
+const DEBUG_MODE = false;
+
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x151515);
 
@@ -213,16 +216,22 @@ log('Metrics tracker initialized');
 // ============================================
 
 function updateDashboard() {
+  // Check if dashboard elements exist before updating
+  const throughputEl = document.getElementById('throughput');
+  if (!throughputEl) return; // Dashboard not present in UI
+  
   // Update throughput
   const throughput = metrics.getCurrentThroughput();
-  document.getElementById('throughput').textContent = throughput.toFixed(1) + ' boxes/min';
+  throughputEl.textContent = throughput.toFixed(1) + ' boxes/min';
 
   // Update boxes processed
-  document.getElementById('boxesProcessed').textContent = metrics.boxesProcessed;
+  const boxesEl = document.getElementById('boxesProcessed');
+  if (boxesEl) boxesEl.textContent = metrics.boxesProcessed;
 
   // Update average cycle time
   const avgCycle = metrics.getAvgCycleTime();
-  document.getElementById('cycleTime').textContent = avgCycle.toFixed(1) + 's';
+  const cycleEl = document.getElementById('cycleTime');
+  if (cycleEl) cycleEl.textContent = avgCycle.toFixed(1) + 's';
 
   // Update equipment status
   updateEquipmentUI('gantry', metrics.equipment.gantry.status);
@@ -231,9 +240,12 @@ function updateDashboard() {
   updateEquipmentUI('robot', metrics.equipment.robot.status);
 
   // Update queue stats
-  document.getElementById('queueWaiting').textContent = metrics.queueStats.waiting;
-  document.getElementById('inTransit').textContent = metrics.queueStats.inTransit;
-  document.getElementById('onPallet').textContent = metrics.queueStats.onPallet;
+  const queueWaitingEl = document.getElementById('queueWaiting');
+  const inTransitEl = document.getElementById('inTransit');
+  const onPalletEl = document.getElementById('onPallet');
+  if (queueWaitingEl) queueWaitingEl.textContent = metrics.queueStats.waiting;
+  if (inTransitEl) inTransitEl.textContent = metrics.queueStats.inTransit;
+  if (onPalletEl) onPalletEl.textContent = metrics.queueStats.onPallet;
 
   // Update throughput chart
   updateThroughputChart();
@@ -242,6 +254,8 @@ function updateDashboard() {
 function updateEquipmentUI(equipmentId, status) {
   const indicator = document.getElementById(equipmentId + '-status');
   const stateText = document.getElementById(equipmentId + '-state');
+  
+  if (!indicator || !stateText) return; // Elements don't exist
 
   // Update indicator class
   indicator.className = 'status-indicator';
@@ -622,11 +636,6 @@ const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
 gridHelper.position.y = 0.01;
 scene.add(gridHelper);
 
-// Axis helper at origin
-const axisHelper = new THREE.AxesHelper(2);
-axisHelper.position.y = 0.02;
-scene.add(axisHelper);
-
 // Hover tile highlight
 const hoverTile = new THREE.Mesh(
   new THREE.PlaneGeometry(1, 1),
@@ -667,15 +676,19 @@ window.addEventListener('mousemove', (event) => {
     
     // Update hover tile
     hoverTile.position.set(gridX, 0.02, gridZ);
-    hoverTile.visible = true;
+    hoverTile.visible = DEBUG_MODE; // Only show in debug mode
     
-    // Update UI
-    document.getElementById('mouseX').textContent = gridX.toFixed(1);
-    document.getElementById('mouseZ').textContent = gridZ.toFixed(1);
+    // Update UI if elements exist
+    const mouseXEl = document.getElementById('mouseX');
+    const mouseZEl = document.getElementById('mouseZ');
+    if (mouseXEl) mouseXEl.textContent = gridX.toFixed(1);
+    if (mouseZEl) mouseZEl.textContent = gridZ.toFixed(1);
   } else {
     hoverTile.visible = false;
-    document.getElementById('mouseX').textContent = '-';
-    document.getElementById('mouseZ').textContent = '-';
+    const mouseXEl = document.getElementById('mouseX');
+    const mouseZEl = document.getElementById('mouseZ');
+    if (mouseXEl) mouseXEl.textContent = '-';
+    if (mouseZEl) mouseZEl.textContent = '-';
   }
 });
 
